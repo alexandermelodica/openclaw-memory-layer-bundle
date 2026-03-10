@@ -43,6 +43,13 @@ It must not contain:
 3. Create a GitHub release from that tag.
 4. Attach `dist/openclaw-memory-layer-bundle-0.1.0.tar.gz`.
 
+## Known Limitations
+
+- Linux x86_64 only for the bundled `sqlite-vec` binary
+- requires Ollama and the `nomic-embed-text` model
+- installer patches `~/.openclaw/openclaw.json` but writes a backup first
+- retrieval stays empty until you ingest documents into the new memory DB
+
 ## Install From Release
 
 ```bash

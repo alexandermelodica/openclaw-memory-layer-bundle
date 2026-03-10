@@ -86,3 +86,11 @@ dist/openclaw-memory-layer-bundle-0.1.0.tar.gz
 - If search returns nothing, the plugin injects nothing.
 - The plugin works before model dispatch, so it is provider-agnostic.
 - This bundle currently ships a Linux x86_64 `sqlite-vec` binary.
+
+## Known Limitations
+
+- Linux x86_64 only for the bundled `sqlite-vec` binary in `engine/sqlite-vec/vec0.so`
+- expects Ollama to be running and reachable
+- expects the embedding model `nomic-embed-text` to be available
+- installer patches `~/.openclaw/openclaw.json` and writes a timestamped backup before changes
+- first useful recall appears only after document ingest
