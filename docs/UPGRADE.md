@@ -11,6 +11,10 @@ If this is a first-time installation, do not use the upgrade path. Use:
 ./install/install-openclaw-memory-layer.sh
 ```
 
+## Supported Upgrade Path
+
+This document covers upgrades from `v0.1.0` to `v0.2.0`.
+
 ## Previous Version
 
 Previous versions used a global memory model without Telegram-specific scoped
@@ -24,7 +28,7 @@ That means:
 
 ## New Version
 
-The new version introduces:
+`v0.2.0` introduces:
 
 - `scope`
 - `source`
@@ -93,8 +97,8 @@ Compare old and new retrieval behavior before switching live prompt injection.
 
 Only after validation, point the live plugin to the new engine path.
 
-If the staging validation already passed and you want a scripted production
-upgrade sequence, use:
+If staging validation already passed and you want the scripted production
+upgrade sequence for an existing installation, use:
 
 ```bash
 ./install/upgrade-to-scoped-memory.sh

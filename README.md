@@ -85,7 +85,7 @@ Build a release archive locally:
 Expected output:
 
 ```bash
-dist/openclaw-memory-layer-bundle-0.1.0.tar.gz
+dist/openclaw-memory-layer-bundle-0.2.0.tar.gz
 ```
 
 ## Notes
@@ -100,7 +100,15 @@ dist/openclaw-memory-layer-bundle-0.1.0.tar.gz
 
 - Production rollout: `docs/ROLLOUT.md`
 - Upgrade from previous version: `docs/UPGRADE.md`
-- Post-validation upgrade script: `install/upgrade-to-scoped-memory.sh`
+- Post-validation upgrade script for existing installs: `install/upgrade-to-scoped-memory.sh`
+- Change history: `CHANGELOG.md`
+
+## Versioning Notes
+
+- `v0.1.0` is the initial public bundle release.
+- `v0.2.0` adds scoped Telegram-aware memory architecture, rollout guidance, and the scripted upgrade path.
+- Use the clean install script only for new hosts.
+- Use the upgrade script only when a previous memory-layer installation already exists.
 
 ## Known Limitations
 
