@@ -1,0 +1,21 @@
+{
+  "plugins": {
+    "allow": ["global-memory"],
+    "entries": {
+      "global-memory": {
+        "enabled": true,
+        "config": {
+          "engineRoot": "/home/USER/.openclaw/memory-layer/engine",
+          "nodeBin": "/usr/bin/node",
+          "maxResults": 3,
+          "minScore": 0.35,
+          "maxChars": 1400,
+          "maxSnippetChars": 320,
+          "timeoutMs": 12000,
+          "minPromptChars": 12,
+          "userTriggersOnly": true
+        }
+      }
+    }
+  }
+}

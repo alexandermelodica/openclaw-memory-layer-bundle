@@ -1,0 +1,28 @@
+{
+  "name": "global-memory",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Provider-agnostic global memory recall plugin for OpenClaw using the bundled memory engine",
+  "license": "MIT",
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "rag",
+    "memory",
+    "retrieval"
+  ],
+  "scripts": {
+    "check": "node --check ../install/patch-openclaw-config.js"
+  },
+  "files": [
+    "index.ts",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
