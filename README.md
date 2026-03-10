@@ -66,6 +66,20 @@ node "$HOME/.openclaw/memory-layer/engine/bin/ingest-docs.js" \
 ./install/smoke-test.sh
 ```
 
+## Release Tarball
+
+Build a release archive locally:
+
+```bash
+./scripts/build-release-tarball.sh
+```
+
+Expected output:
+
+```bash
+dist/openclaw-memory-layer-bundle-0.1.0.tar.gz
+```
+
 ## Notes
 
 - The engine is intentionally narrow and deterministic.
