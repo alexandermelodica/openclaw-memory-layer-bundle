@@ -7,6 +7,7 @@ const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { getConfig } = require('../lib/config.js');
 const { extractTags } = require('../lib/tags-helper.js');
+const { DEFAULT_SCOPE, DEFAULT_SOURCE } = require('../lib/memory-scope.js');
 
 const MAX_CHARS = 6000;
 const MIN_CHARS = 400;
@@ -316,6 +317,8 @@ async function ingestDocFile(filePath) {
             const ts = new Date().toISOString();
             const kind = determineKind(chunk.headingPath);
             const { project, service, env, tags, tags_norm } = getMetadata(absoluteFilePath, chunk.headingPath);
+            const source = DEFAULT_SOURCE;
+            const scope = DEFAULT_SCOPE;
             
             // Auto‑verification for official knowledge‑base files
             let status = 'ok';
@@ -336,8 +339,8 @@ async function ingestDocFile(filePath) {
                 if (existing.content_hash === contentHash) {
                     // Update metadata (tags, project, service, env) in case they changed
                     await db.run(
-                        `UPDATE embeddings SET ts = ?, project = ?, service = ?, env = ?, tags = ?, tags_norm = ? WHERE id = ?`,
-                        ts, project, service, env, tags, tags_norm, existing.id
+                        `UPDATE embeddings SET ts = ?, project = ?, service = ?, env = ?, source = ?, scope = ?, tags = ?, tags_norm = ? WHERE id = ?`,
+                        ts, project, service, env, source, scope, tags, tags_norm, existing.id
                     );
                     console.log(`Updated metadata for existing doc chunk ${chunk.headingPath} (${chunk.startLine}-${chunk.endLine})`);
                     skipped++;
@@ -367,11 +370,11 @@ async function ingestDocFile(filePath) {
             
             const embeddingId = uuidv4();
             await db.run(
-                `INSERT INTO embeddings (id, ts, source_type, source_id, content_hash, vector, vector_raw, vector_dim, model, meta_json, status, error_text, kind, created_at, ttl_until, project, service, env, tags, tags_norm)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO embeddings (id, ts, source_type, source_id, content_hash, vector, vector_raw, vector_dim, model, meta_json, status, error_text, kind, created_at, ttl_until, project, service, env, source, scope, tags, tags_norm)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 embeddingId, ts, 'doc', sourceId, contentHash,
                 embedding.json, embedding.raw, embedding.dim, getConfig().embedModel, metaJson,
-                dbStatus, embedding.error, kind, createdAt, ttlUntilSql, project, service, env, tags, tags_norm
+                dbStatus, embedding.error, kind, createdAt, ttlUntilSql, project, service, env, source, scope, tags, tags_norm
             );
             const statusMsg = embedding.status === 'ok' ? 'ingested' : 'failed';
             console.log(`Doc chunk ${chunk.headingPath} (${chunk.startLine}-${chunk.endLine}) ${statusMsg} with ID: ${embeddingId}`);

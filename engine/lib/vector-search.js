@@ -4,6 +4,7 @@ const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { extractQueryTags } = require('./tags-helper');
 const { getConfig } = require('./config');
+const { normalizeMemoryContext, allowRowForContext, scopeBonus, sourceFilterClause } = require('./memory-scope');
 
 async function generateEmbedding(text) {
     const config = getConfig();
@@ -45,6 +46,7 @@ async function generateEmbedding(text) {
 
 async function vectorSearchJson(query, limit = 10, options = {}) {
     const rows = await vectorSearch(query, limit, options);
+    const memoryContext = normalizeMemoryContext(options.memoryContext);
     
     // Context from options or environment
     const context = {
@@ -53,6 +55,7 @@ async function vectorSearchJson(query, limit = 10, options = {}) {
         env: options.env || process.env.RAG_CONTEXT_ENV || null,
         tags: options.tagsWanted || [],
         tagsMode: options.tagsMode || 'or',
+        memoryContext,
     };
     
     // Prepare hits array
@@ -79,6 +82,12 @@ async function vectorSearchJson(query, limit = 10, options = {}) {
                 project: row.project || null,
                 service: row.service || null,
                 env: row.env || null,
+                source: row.source || null,
+                scope: row.scope || null,
+                chat_id: row.chat_id || null,
+                thread_id: row.thread_id || null,
+                user_id: row.user_id || null,
+                session_id: row.session_id || null,
                 created_at: row.created_at || null,
                 ttl_until: row.ttl_until || null
             }
@@ -126,6 +135,7 @@ async function vectorSearch(query, limit = 10, options = {}) {
         env: options.env || process.env.RAG_CONTEXT_ENV || null,
         tags: options.tagsWanted || (options.tags ? options.tags.split(',').map(t => t.trim()).filter(t => t) : []),
         tagsMode: options.tagsMode || 'or',
+        memoryContext: normalizeMemoryContext(options.memoryContext),
     };
 
     // Parameterizable weights (production defaults)
@@ -203,6 +213,7 @@ async function vectorSearch(query, limit = 10, options = {}) {
         whereConditions.push('(e.env = ? OR e.env IS NULL)');
         queryParams.push(context.env);
     }
+    sourceFilterClause(context.memoryContext, whereConditions, queryParams);
     // Filter by tags if specified in CLI options
     if (context.tags && context.tags.length > 0) {
         if (process.env.DEBUG_RAG) {
@@ -259,6 +270,12 @@ async function vectorSearch(query, limit = 10, options = {}) {
             e.tags,
             e.tags_norm,
             e.meta_json,
+            e.source,
+            e.scope,
+            e.chat_id,
+            e.thread_id,
+            e.user_id,
+            e.session_id,
             -- Get source content based on source_type
             CASE
                 WHEN e.source_type = 'code_snapshot' THEN cs.content
@@ -295,7 +312,9 @@ async function vectorSearch(query, limit = 10, options = {}) {
     const dmax = Math.max(...distances);
     const range = dmax - dmin;
     
-    const rows = candidates.map(row => {
+    const rows = candidates
+    .filter(row => allowRowForContext(row, context.memoryContext))
+    .map(row => {
         // Normalized similarity: 1 for closest, 0 for farthest in candidate set
         const sim = range < 1e-9 ? 1.0 : 1 - (row.distance - dmin) / range;
         
@@ -352,8 +371,10 @@ async function vectorSearch(query, limit = 10, options = {}) {
                 console.log(`[DEBUG_RAG] tag bonus +${tagBonus.toFixed(3)} for ${row.id}, matched tags: ${matched} (exact CSV matching)`);
             }
         }
+
+        const scopeBoost = scopeBonus(row, context.memoryContext);
         
-        const finalScore = sim + statusBonus + kindBonus + recencyBonus + contextBonus + tagBonus;
+        const finalScore = sim + statusBonus + kindBonus + recencyBonus + contextBonus + tagBonus + scopeBoost;
         
         return {
             ...row,
@@ -364,6 +385,7 @@ async function vectorSearch(query, limit = 10, options = {}) {
             recencyBonus,
             contextBonus,
             tagBonus,
+            scopeBonus: scopeBoost,
             finalScore
         };
     }).sort((a, b) => {

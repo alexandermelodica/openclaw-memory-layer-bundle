@@ -86,6 +86,7 @@ dist/openclaw-memory-layer-bundle-0.1.0.tar.gz
 - If search returns nothing, the plugin injects nothing.
 - The plugin works before model dispatch, so it is provider-agnostic.
 - This bundle currently ships a Linux x86_64 `sqlite-vec` binary.
+- Telegram chat isolation should use scoped memory; see `docs/TELEGRAM-SCOPED-MEMORY.md`.
 
 ## Known Limitations
 

@@ -2,9 +2,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { vectorSearch } = require("../lib/vector-search.js");
+const { normalizeMemoryContext } = require("../lib/memory-scope.js");
 
 function parseArgs(argv) {
-  const args = { query: "", limit: 3, json: false };
+  const args = { query: "", limit: 3, json: false, memoryContext: {} };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--query" && argv[i + 1]) {
@@ -13,8 +14,21 @@ function parseArgs(argv) {
       args.limit = Math.max(1, Number.parseInt(argv[++i], 10) || 3);
     } else if (arg === "--json") {
       args.json = true;
+    } else if (arg === "--source" && argv[i + 1]) {
+      args.memoryContext.source = argv[++i];
+    } else if (arg === "--scope" && argv[i + 1]) {
+      args.memoryContext.scope = argv[++i];
+    } else if (arg === "--chat-id" && argv[i + 1]) {
+      args.memoryContext.chatId = argv[++i];
+    } else if (arg === "--thread-id" && argv[i + 1]) {
+      args.memoryContext.threadId = argv[++i];
+    } else if (arg === "--user-id" && argv[i + 1]) {
+      args.memoryContext.userId = argv[++i];
+    } else if (arg === "--session-id" && argv[i + 1]) {
+      args.memoryContext.sessionId = argv[++i];
     }
   }
+  args.memoryContext = normalizeMemoryContext(args.memoryContext);
   return args;
 }
 
@@ -57,6 +71,8 @@ function toResult(row) {
     score: Number((row.finalScore || 0).toFixed(3)),
     snippet: snippet.slice(0, 320),
     source: row.source_type,
+    memorySource: row.source || null,
+    scope: row.scope || null,
     status: row.status,
     kind: row.kind,
   };
@@ -69,11 +85,11 @@ async function main() {
     process.exit(1);
   }
 
-  const rows = await vectorSearch(args.query, args.limit);
+  const rows = await vectorSearch(args.query, args.limit, { memoryContext: args.memoryContext });
   const results = rows.map(toResult);
 
   if (args.json) {
-    process.stdout.write(JSON.stringify({ query: args.query, results }, null, 2));
+    process.stdout.write(JSON.stringify({ query: args.query, memoryContext: args.memoryContext, results }, null, 2));
     return;
   }
 

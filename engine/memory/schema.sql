@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS embeddings (
   project TEXT,
   service TEXT,
   env TEXT,
+  source TEXT DEFAULT 'filesystem',
+  scope TEXT DEFAULT 'global',
+  chat_id TEXT,
+  thread_id TEXT,
+  user_id TEXT,
+  session_id TEXT,
   tags TEXT,
   tags_norm TEXT,
   CHECK(
@@ -32,6 +38,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source_typ
 CREATE INDEX IF NOT EXISTS idx_embeddings_kind ON embeddings(kind);
 CREATE INDEX IF NOT EXISTS idx_embeddings_status ON embeddings(status);
 CREATE INDEX IF NOT EXISTS idx_embeddings_project_service_env ON embeddings(project, service, env);
+CREATE INDEX IF NOT EXISTS idx_embeddings_scope ON embeddings(scope);
+CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source);
+CREATE INDEX IF NOT EXISTS idx_embeddings_chat_scope ON embeddings(chat_id, scope);
+CREATE INDEX IF NOT EXISTS idx_embeddings_thread_scope ON embeddings(chat_id, thread_id, scope);
+CREATE INDEX IF NOT EXISTS idx_embeddings_user_scope ON embeddings(user_id, scope);
+CREATE INDEX IF NOT EXISTS idx_embeddings_session_scope ON embeddings(session_id, scope);
 CREATE INDEX IF NOT EXISTS idx_embeddings_tags_norm ON embeddings(tags_norm);
 CREATE INDEX IF NOT EXISTS idx_embeddings_created_at ON embeddings(created_at);
 

@@ -12,6 +12,15 @@ type SearchHit = {
   source?: string;
 };
 
+type RuntimeMemoryContext = {
+  source?: string;
+  scope?: string;
+  chatId?: string;
+  threadId?: string;
+  userId?: string;
+  sessionId?: string;
+};
+
 type PluginConfig = {
   engineRoot: string;
   nodeBin: string;
@@ -61,6 +70,55 @@ function normalizeConfig(raw: Record<string, unknown> | undefined): PluginConfig
 
 function normalizeQuery(prompt: string): string {
   return prompt.replace(/\s+/g, " ").trim();
+}
+
+function normalizeOptional(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const normalized = String(value).trim();
+  return normalized || undefined;
+}
+
+function extractRuntimeMemoryContext(event: any, ctx: any): RuntimeMemoryContext {
+  const combined = {
+    ...(ctx ?? {}),
+    ...(ctx?.message ?? {}),
+    ...(ctx?.telegram ?? {}),
+    ...(event?.metadata ?? {}),
+  };
+
+  const source =
+    normalizeOptional(combined.source) ||
+    normalizeOptional(combined.channel) ||
+    normalizeOptional(combined.platform);
+  const chatId =
+    normalizeOptional(combined.chatId) ||
+    normalizeOptional(combined.chat_id);
+  const threadId =
+    normalizeOptional(combined.threadId) ||
+    normalizeOptional(combined.thread_id) ||
+    normalizeOptional(combined.topicId) ||
+    normalizeOptional(combined.topic_id);
+  const userId =
+    normalizeOptional(combined.userId) ||
+    normalizeOptional(combined.user_id) ||
+    normalizeOptional(combined.fromId) ||
+    normalizeOptional(combined.from_id);
+  const sessionId =
+    normalizeOptional(combined.sessionId) ||
+    normalizeOptional(combined.session_id);
+
+  const scope = source === "telegram" ? (threadId ? "session" : chatId ? "chat" : userId ? "user" : "global") : "global";
+
+  return {
+    source,
+    scope,
+    chatId,
+    threadId,
+    userId,
+    sessionId,
+  };
 }
 
 function sanitizeSnippet(text: string, maxChars: number): string {
@@ -124,9 +182,14 @@ async function searchMemory(params: {
   query: string;
   workspaceDir?: string;
   cfg: PluginConfig;
+  memoryContext: RuntimeMemoryContext;
   logger: OpenClawPluginApi["logger"];
 }): Promise<string | null> {
-  const cacheKey = `${params.agentId}\n${params.query}`;
+  const cacheKey = JSON.stringify({
+    agentId: params.agentId,
+    query: params.query,
+    memoryContext: params.memoryContext,
+  });
   const cached = resultCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
@@ -143,6 +206,12 @@ async function searchMemory(params: {
         params.query,
         "--limit",
         String(params.cfg.maxResults),
+        ...(params.memoryContext.source ? ["--source", params.memoryContext.source] : []),
+        ...(params.memoryContext.scope ? ["--scope", params.memoryContext.scope] : []),
+        ...(params.memoryContext.chatId ? ["--chat-id", params.memoryContext.chatId] : []),
+        ...(params.memoryContext.threadId ? ["--thread-id", params.memoryContext.threadId] : []),
+        ...(params.memoryContext.userId ? ["--user-id", params.memoryContext.userId] : []),
+        ...(params.memoryContext.sessionId ? ["--session-id", params.memoryContext.sessionId] : []),
         "--json",
       ],
       {
@@ -221,6 +290,7 @@ const plugin = {
         query,
         workspaceDir: ctx.workspaceDir,
         cfg,
+        memoryContext: extractRuntimeMemoryContext(event, ctx),
         logger: api.logger
       });
 
