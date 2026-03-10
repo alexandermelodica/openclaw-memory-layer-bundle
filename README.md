@@ -88,6 +88,11 @@ dist/openclaw-memory-layer-bundle-0.1.0.tar.gz
 - This bundle currently ships a Linux x86_64 `sqlite-vec` binary.
 - Telegram chat isolation should use scoped memory; see `docs/TELEGRAM-SCOPED-MEMORY.md`.
 
+## Rollout And Upgrade
+
+- Production rollout: `docs/ROLLOUT.md`
+- Upgrade from previous version: `docs/UPGRADE.md`
+
 ## Known Limitations
 
 - Linux x86_64 only for the bundled `sqlite-vec` binary in `engine/sqlite-vec/vec0.so`

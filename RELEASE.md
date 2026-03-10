@@ -50,6 +50,14 @@ It must not contain:
 - installer patches `~/.openclaw/openclaw.json` but writes a backup first
 - retrieval stays empty until you ingest documents into the new memory DB
 
+## Upgrade Notes
+
+- this version introduces scoped Telegram memory fields
+- migration is additive, not destructive
+- direct in-place live DB migration is not the recommended first step
+- prefer staged rollout using a copied DB and parallel engine path
+- see `docs/ROLLOUT.md` and `docs/UPGRADE.md`
+
 ## Install From Release
 
 ```bash

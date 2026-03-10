@@ -31,3 +31,5 @@ Use scoped memory metadata and retrieval layering as described in:
 
 - `docs/TELEGRAM-SCOPED-MEMORY.md`
 - `engine/memory/migrations/001_telegram_scoping.sql`
+- `docs/ROLLOUT.md`
+- `docs/UPGRADE.md`
