@@ -96,6 +96,28 @@ dist/openclaw-memory-layer-bundle-0.2.0.tar.gz
 - This bundle currently ships a Linux x86_64 `sqlite-vec` binary.
 - Telegram chat isolation should use scoped memory; see `docs/TELEGRAM-SCOPED-MEMORY.md`.
 
+## Telegram Chat Context Separation
+
+Starting with `v0.2.0`, Telegram memory is designed to be scoped instead of
+treated as one shared pool.
+
+That means the bundle now supports separating memory by:
+
+- `chat_id`
+- `thread_id`
+- `user_id`
+- `session_id`
+
+The intended behavior is:
+
+- one Telegram chat should not leak context into another chat
+- group topics should not mix context with other topics
+- direct messages should stay separate from group memory
+- shared durable knowledge can still be stored as `global` memory
+
+This is the foundation for safer Telegram bot memory in OpenClaw, especially
+when one bot is present in multiple chats.
+
 ## Rollout And Upgrade
 
 - Production rollout: `docs/ROLLOUT.md`
