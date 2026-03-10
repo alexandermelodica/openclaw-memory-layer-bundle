@@ -56,6 +56,7 @@ It must not contain:
 - migration is additive, not destructive
 - direct in-place live DB migration is not the recommended first step
 - prefer staged rollout using a copied DB and parallel engine path
+- after successful validation, use `install/upgrade-to-scoped-memory.sh` for the production upgrade sequence
 - see `docs/ROLLOUT.md` and `docs/UPGRADE.md`
 
 ## Install From Release

@@ -92,6 +92,7 @@ dist/openclaw-memory-layer-bundle-0.1.0.tar.gz
 
 - Production rollout: `docs/ROLLOUT.md`
 - Upgrade from previous version: `docs/UPGRADE.md`
+- Post-validation upgrade script: `install/upgrade-to-scoped-memory.sh`
 
 ## Known Limitations
 

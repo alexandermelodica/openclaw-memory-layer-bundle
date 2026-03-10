@@ -85,6 +85,25 @@ Compare old and new retrieval behavior before switching live prompt injection.
 
 Only after validation, point the live plugin to the new engine path.
 
+If the staging validation already passed and you want a scripted production
+upgrade sequence, use:
+
+```bash
+./install/upgrade-to-scoped-memory.sh
+```
+
+This script does the successful post-validation sequence:
+
+- backups live DB
+- backups live config
+- deploys the new engine
+- copies the live DB into the scoped engine path
+- applies the additive migration
+- runs a health check
+- patches `openclaw.json` to point `global-memory` to the new `engineRoot`
+
+It does **not** restart the gateway automatically.
+
 ### 9. Keep Rollback Simple
 
 Do not delete the previous engine or previous DB immediately.
