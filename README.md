@@ -46,11 +46,19 @@ openclaw-memory-layer-bundle/
 
 ## Install
 
+For first-time installation only:
+
 ```bash
 git clone <repo-url>
 cd openclaw-memory-layer-bundle
 ./install/install-openclaw-memory-layer.sh
 ```
+
+If a previous version is already installed, do not use the clean install path.
+Use the upgrade flow described in:
+
+- `docs/UPGRADE.md`
+- `install/upgrade-to-scoped-memory.sh`
 
 ## First Ingest
 

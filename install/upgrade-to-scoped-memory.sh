@@ -23,12 +23,29 @@ need sqlite3
 need openclaw
 
 if [[ ! -f "$LIVE_DB" ]]; then
-  echo "Live memory DB not found: $LIVE_DB" >&2
+  cat <<EOF >&2
+Live memory DB not found: $LIVE_DB
+
+This upgrade script is only for updating an existing installation.
+For a first-time installation, use:
+  ./install/install-openclaw-memory-layer.sh
+EOF
   exit 1
 fi
 
 if [[ ! -f "$LIVE_CONFIG" ]]; then
   echo "OpenClaw config not found: $LIVE_CONFIG" >&2
+  exit 1
+fi
+
+if [[ ! -f "$HOME/.openclaw/workspace/memory/db/memory.sqlite" && ! -e "$TARGET_ROOT" ]]; then
+  cat <<EOF >&2
+Previous installation markers were not found.
+
+This upgrade script is intended for existing deployments only.
+For a clean installation, use:
+  ./install/install-openclaw-memory-layer.sh
+EOF
   exit 1
 fi
 

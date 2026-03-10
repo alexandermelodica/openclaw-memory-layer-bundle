@@ -3,6 +3,14 @@
 This guide describes how to update from the previous bundle version to the new
 scoped Telegram-aware memory layer.
 
+Use this guide only if a previous memory-layer version is already installed.
+
+If this is a first-time installation, do not use the upgrade path. Use:
+
+```bash
+./install/install-openclaw-memory-layer.sh
+```
+
 ## Previous Version
 
 Previous versions used a global memory model without Telegram-specific scoped
@@ -103,6 +111,8 @@ This script does the successful post-validation sequence:
 - patches `openclaw.json` to point `global-memory` to the new `engineRoot`
 
 It does **not** restart the gateway automatically.
+
+It also refuses to run on a clean host without an existing installation.
 
 ### 9. Keep Rollback Simple
 

@@ -61,8 +61,16 @@ It must not contain:
 
 ## Install From Release
 
+For first-time installation only:
+
 ```bash
 tar -xzf openclaw-memory-layer-bundle-0.1.0.tar.gz
 cd openclaw-memory-layer-bundle-0.1.0
 ./install/install-openclaw-memory-layer.sh
+```
+
+If you are updating from a previous version, use:
+
+```bash
+./install/upgrade-to-scoped-memory.sh
 ```

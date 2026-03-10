@@ -5,6 +5,7 @@ BUNDLE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_ROOT="${MEMORY_LAYER_HOME:-$HOME/.openclaw/memory-layer}"
 ENGINE_TARGET="$TARGET_ROOT/engine"
 OPENCLAW_CONFIG="${OPENCLAW_CONFIG_PATH:-$HOME/.openclaw/openclaw.json}"
+ALLOW_OVERWRITE="${ALLOW_OVERWRITE_INSTALL:-false}"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -17,6 +18,25 @@ need node
 need npm
 need sqlite3
 need openclaw
+
+if [[ -e "$ENGINE_TARGET" || -e "$TARGET_ROOT/db/memory.sqlite" ]]; then
+  if [[ "$ALLOW_OVERWRITE" != "true" ]]; then
+    cat <<EOF
+Existing memory-layer installation detected at:
+- $ENGINE_TARGET
+- $TARGET_ROOT/db/memory.sqlite
+
+This script is for first-time installation only.
+
+If you are updating from a previous version, use:
+  ./install/upgrade-to-scoped-memory.sh
+
+If you intentionally want to overwrite this installation, rerun with:
+  ALLOW_OVERWRITE_INSTALL=true ./install/install-openclaw-memory-layer.sh
+EOF
+    exit 1
+  fi
+fi
 
 mkdir -p "$TARGET_ROOT"
 rm -rf "$ENGINE_TARGET"
