@@ -57,9 +57,19 @@ function snippetFromFile(meta, fallbackPath) {
 function toResult(row) {
   const meta = row.meta_json ? JSON.parse(row.meta_json) : {};
   const decoded = decodeDocSource(row.source_id) || {};
-  const filePath = meta.filePath || decoded.path || row.source_id;
+  const telegramLabel =
+    meta.label || meta.conversation?.group_subject || meta.sessionLabel || (row.chat_id ? `telegram:${row.chat_id}` : null);
+  const filePath =
+    meta.filePath ||
+    telegramLabel ||
+    decoded.path ||
+    (row.source_type === "telegram_summary" ? `telegram:${row.chat_id || row.user_id || "unknown"}` : row.source_id);
   const snippet =
     snippetFromFile(meta, decoded.path) ||
+    meta.contentPreview ||
+    (row.source_type === "telegram_summary" && telegramLabel
+      ? `Telegram ${row.kind || "memory"} note from ${telegramLabel}`
+      : "") ||
     row.source_content ||
     meta.headingPath ||
     row.source_id;

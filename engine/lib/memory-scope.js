@@ -37,13 +37,17 @@ function scopeBonus(row, context) {
   const rowSource = normalizeOptional(row.source);
 
   if (context.source === TELEGRAM_SOURCE) {
-    if (rowScope === "session" && context.sessionId && row.session_id === context.sessionId) return 0.2;
+    if (rowScope === "session" && context.sessionId && row.session_id === context.sessionId) return 0.35;
     if (rowScope === "chat" && context.chatId && row.chat_id === context.chatId) {
-      if (row.thread_id && context.threadId && row.thread_id === context.threadId) return 0.18;
-      if (!row.thread_id) return 0.15;
+      if (row.thread_id && context.threadId && row.thread_id === context.threadId) return 0.32;
+      if (!row.thread_id) return 0.28;
     }
-    if (rowScope === "user" && context.userId && row.user_id === context.userId) return 0.1;
-    if (rowScope === "global") return rowSource === TELEGRAM_SOURCE || !rowSource ? 0.01 : 0;
+    if (rowScope === "user" && context.userId && row.user_id === context.userId) return 0.22;
+    if (rowScope === "global") {
+      if (rowSource === TELEGRAM_SOURCE) return 0.02;
+      if (["decision", "runbook", "config", "postmortem"].includes(String(row.kind || ""))) return -0.02;
+      return -0.18;
+    }
     return Number.NEGATIVE_INFINITY;
   }
 
@@ -56,6 +60,20 @@ function scopeBonus(row, context) {
 function allowRowForContext(row, context) {
   const bonus = scopeBonus(row, context);
   return Number.isFinite(bonus);
+}
+
+function scopeRank(row, context) {
+  const rowScope = normalizeScope(row.scope);
+
+  if (context.source === TELEGRAM_SOURCE) {
+    if (rowScope === "session" && context.sessionId && row.session_id === context.sessionId) return 4;
+    if (rowScope === "chat" && context.chatId && row.chat_id === context.chatId) return row.thread_id && context.threadId && row.thread_id === context.threadId ? 3 : 3;
+    if (rowScope === "user" && context.userId && row.user_id === context.userId) return 2;
+    if (rowScope === "global") return 1;
+    return 0;
+  }
+
+  return rowScope === "global" ? 1 : 0;
 }
 
 function sourceFilterClause(context, whereConditions, queryParams) {
@@ -80,5 +98,6 @@ module.exports = {
   normalizeMemoryContext,
   allowRowForContext,
   scopeBonus,
+  scopeRank,
   sourceFilterClause,
 };

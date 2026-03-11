@@ -14,6 +14,7 @@ All notable changes to `openclaw-memory-layer-bundle` are documented here.
   - `user_id`
   - `session_id`
 - Scope-aware retrieval and reranking support in the Memory Engine.
+- `engine/bin/ingest-telegram-sessions.js` for writing scoped Telegram memory from OpenClaw session logs.
 - `docs/ROLLOUT.md` for staged production rollout.
 - `docs/UPGRADE.md` for upgrading existing installations.
 - `install/upgrade-to-scoped-memory.sh` for the post-validation production upgrade path.
@@ -22,10 +23,11 @@ All notable changes to `openclaw-memory-layer-bundle` are documented here.
 - Clean install and upgrade are now explicitly separated.
 - Documentation now distinguishes new-host installation from upgrades of existing deployments.
 - Release flow now targets the `0.2.0` artifact line.
+- Telegram-scoped write path now includes a dedicated session ingester intended for host cron/systemd scheduling without LLM tokens.
 
 ### Notes
 - This release is intended to upgrade existing `v0.1.0` deployments through a staged migration path.
-- Full Telegram isolation still depends on enabling the scoped write path for new records.
+- Full Telegram isolation for new turns depends on running the Telegram session ingest path as part of operations.
 
 ## v0.1.0
 
@@ -34,4 +36,3 @@ All notable changes to `openclaw-memory-layer-bundle` are documented here.
 - Standalone Memory Engine.
 - `global-memory` OpenClaw plugin.
 - Installer, release tarball flow, and smoke-test path.
-

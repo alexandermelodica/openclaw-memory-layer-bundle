@@ -177,6 +177,24 @@ function formatContext(hits: SearchHit[], cfg: PluginConfig): string | null {
   ].join("\n");
 }
 
+function parseSearchJson(stdout: string): { results?: SearchHit[] } | null {
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed) as { results?: SearchHit[] };
+  } catch {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error("No JSON object found in search output");
+    }
+    return JSON.parse(trimmed.slice(start, end + 1)) as { results?: SearchHit[] };
+  }
+}
+
 async function searchMemory(params: {
   agentId: string;
   query: string;
@@ -234,7 +252,7 @@ async function searchMemory(params: {
 
   let parsed: { results?: SearchHit[] } | null = null;
   try {
-    parsed = JSON.parse(stdout) as { results?: SearchHit[] };
+    parsed = parseSearchJson(stdout);
   } catch (error) {
     const detail = stderr.trim() || String(error);
     params.logger.warn(`global-memory: memory search failed${detail ? `: ${detail}` : ""}`);

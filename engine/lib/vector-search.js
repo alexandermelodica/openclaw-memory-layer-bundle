@@ -4,7 +4,11 @@ const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const { extractQueryTags } = require('./tags-helper');
 const { getConfig } = require('./config');
-const { normalizeMemoryContext, allowRowForContext, scopeBonus, sourceFilterClause } = require('./memory-scope');
+const { normalizeMemoryContext, allowRowForContext, scopeBonus, scopeRank, sourceFilterClause } = require('./memory-scope');
+
+function runtimeLog(...args) {
+    console.error(...args);
+}
 
 async function generateEmbedding(text) {
     const config = getConfig();
@@ -168,11 +172,11 @@ async function vectorSearch(query, limit = 10, options = {}) {
     };
     
     if (process.env.DEBUG_RAG) {
-        console.log('[DEBUG_RAG] weights:', JSON.stringify(weights, null, 2));
-        console.log('[DEBUG_RAG] context:', context);
+        runtimeLog('[DEBUG_RAG] weights:', JSON.stringify(weights, null, 2));
+        runtimeLog('[DEBUG_RAG] context:', context);
     }
 
-    console.log(`Generating embedding for query: "${query}"`);
+    runtimeLog(`Generating embedding for query: "${query}"`);
     const embedding = await generateEmbedding(query);
     
     // Extract tags from query for tag bonus
@@ -186,7 +190,7 @@ async function vectorSearch(query, limit = 10, options = {}) {
         });
     }
     if (process.env.DEBUG_RAG && queryTags.length > 0) {
-        console.log(`[DEBUG_RAG] query tags: ${queryTags.join(', ')}`);
+        runtimeLog(`[DEBUG_RAG] query tags: ${queryTags.join(', ')}`);
     }
 
     // Stage A: retrieve top‑50 candidates by raw distance with soft context filters
@@ -217,7 +221,7 @@ async function vectorSearch(query, limit = 10, options = {}) {
     // Filter by tags if specified in CLI options
     if (context.tags && context.tags.length > 0) {
         if (process.env.DEBUG_RAG) {
-            console.log(`[DEBUG_RAG] tags filter: ${context.tags.join(', ')} (mode: ${context.tagsMode})`);
+            runtimeLog(`[DEBUG_RAG] tags filter: ${context.tags.join(', ')} (mode: ${context.tagsMode})`);
         }
         
         // When filtering by tags, exclude records with NULL or empty tags
@@ -291,8 +295,8 @@ async function vectorSearch(query, limit = 10, options = {}) {
     `;
     
     if (process.env.DEBUG_RAG_SQL) {
-        console.log('[DEBUG_RAG_SQL] SQL:', sql);
-        console.log('[DEBUG_RAG_SQL] Params:', queryParams.slice(0, -1)); // Exclude limit
+        runtimeLog('[DEBUG_RAG_SQL] SQL:', sql);
+        runtimeLog('[DEBUG_RAG_SQL] Params:', queryParams.slice(0, -1)); // Exclude limit
     }
     
     const candidates = await db.all(sql, queryParams);
@@ -338,15 +342,15 @@ async function vectorSearch(query, limit = 10, options = {}) {
         let contextBonus = 0;
         if (context.project && row.project && row.project === context.project) {
             contextBonus += weights.contextBonus.project;
-            if (process.env.DEBUG_RAG) console.log(`[DEBUG_RAG] context bonus project +${weights.contextBonus.project} for ${row.id}`);
+            if (process.env.DEBUG_RAG) runtimeLog(`[DEBUG_RAG] context bonus project +${weights.contextBonus.project} for ${row.id}`);
         }
         if (context.service && row.service && row.service === context.service) {
             contextBonus += weights.contextBonus.service;
-            if (process.env.DEBUG_RAG) console.log(`[DEBUG_RAG] context bonus service +${weights.contextBonus.service} for ${row.id}`);
+            if (process.env.DEBUG_RAG) runtimeLog(`[DEBUG_RAG] context bonus service +${weights.contextBonus.service} for ${row.id}`);
         }
         if (context.env && row.env && row.env === context.env) {
             contextBonus += weights.contextBonus.env;
-            if (process.env.DEBUG_RAG) console.log(`[DEBUG_RAG] context bonus env +${weights.contextBonus.env} for ${row.id}`);
+            if (process.env.DEBUG_RAG) runtimeLog(`[DEBUG_RAG] context bonus env +${weights.contextBonus.env} for ${row.id}`);
         }
         
         // Tag bonus: match tags from query (exact CSV matching)
@@ -368,11 +372,12 @@ async function vectorSearch(query, limit = 10, options = {}) {
             tagBonus = Math.min(weights.tagBonusMax, weights.tagBonusPerMatch * matched);
             
             if (process.env.DEBUG_RAG && matched > 0) {
-                console.log(`[DEBUG_RAG] tag bonus +${tagBonus.toFixed(3)} for ${row.id}, matched tags: ${matched} (exact CSV matching)`);
+                runtimeLog(`[DEBUG_RAG] tag bonus +${tagBonus.toFixed(3)} for ${row.id}, matched tags: ${matched} (exact CSV matching)`);
             }
         }
 
         const scopeBoost = scopeBonus(row, context.memoryContext);
+        const rowScopeRank = scopeRank(row, context.memoryContext);
         
         const finalScore = sim + statusBonus + kindBonus + recencyBonus + contextBonus + tagBonus + scopeBoost;
         
@@ -386,9 +391,14 @@ async function vectorSearch(query, limit = 10, options = {}) {
             contextBonus,
             tagBonus,
             scopeBonus: scopeBoost,
+            scopeRank: rowScopeRank,
             finalScore
         };
     }).sort((a, b) => {
+        if (context.memoryContext.source === 'telegram' && a.scopeRank !== b.scopeRank) {
+            return b.scopeRank - a.scopeRank;
+        }
+
         // HARD GUARANTEE: verified ALWAYS comes first, regardless of score
         if (a.status === 'verified' && b.status !== 'verified') return -1;
         if (b.status === 'verified' && a.status !== 'verified') return 1;

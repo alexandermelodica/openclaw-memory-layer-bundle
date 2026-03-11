@@ -54,6 +54,22 @@ Recommended pipeline:
 2. extract summaries/facts/preferences
 3. persist only the extracted memory
 
+This bundle now provides a dedicated writer for that extraction path:
+
+```bash
+"$HOME/.openclaw/memory-layer/engine/bin/ingest-telegram-sessions.sh"
+```
+
+The writer reads OpenClaw Telegram sessions, parses message metadata from the
+session JSONL files, and writes only promoted notes instead of the full raw chat
+stream.
+
+Recommended operations model:
+
+- run the writer from host cron or a systemd timer
+- avoid scheduling it through an LLM-backed agent job
+- keep it token-free and deterministic
+
 ## Retrieval Policy
 
 Retrieval should be layered, not flat.
@@ -128,9 +144,9 @@ This combines with existing reranking:
 
 To implement scoped Telegram memory in this bundle:
 
-1. extend ingest/write flows to save `scope`, `source`, `chat_id`, `thread_id`, `user_id`, `session_id`
-2. extend `engine/lib/vector-search.js` to filter and bonus by scope
-3. extend the OpenClaw plugin context bridge so Telegram runtime metadata is passed into search
+1. use the Telegram session writer to save `scope`, `source`, `chat_id`, `thread_id`, `user_id`, `session_id`
+2. use `engine/lib/vector-search.js` scope filtering and scope bonuses
+3. use the OpenClaw plugin context bridge so Telegram runtime metadata is passed into search
 
 ## Safety Rule
 
@@ -147,4 +163,3 @@ The correct rule is:
 
 - write broadly enough to preserve useful memory
 - retrieve narrowly enough to protect context boundaries
-

@@ -68,6 +68,13 @@ node "$HOME/.openclaw/memory-layer/engine/bin/ingest-docs.js" \
   "**/*.md"
 ```
 
+For Telegram-scoped durable notes:
+
+```bash
+node "$HOME/.openclaw/memory-layer/engine/bin/ingest-telegram-sessions.js" \
+  "$HOME/.openclaw/agents/main/sessions/sessions.json"
+```
+
 ## Smoke Test
 
 ```bash
@@ -118,6 +125,25 @@ The intended behavior is:
 This is the foundation for safer Telegram bot memory in OpenClaw, especially
 when one bot is present in multiple chats.
 
+The bundle now ships a dedicated Telegram session writer that:
+
+- reads OpenClaw `sessions.json` and session JSONL files
+- extracts Telegram metadata from user turns
+- keeps only durable summaries, facts, decisions, and preferences
+- writes scoped memory rows with `chat_id`, `thread_id`, `user_id`, and `session_id`
+
+It is intentionally narrow: it does not ingest every raw Telegram message into
+durable memory.
+
+Recommended regular sync on a live host:
+
+```bash
+"$HOME/.openclaw/memory-layer/engine/bin/ingest-telegram-sessions.sh"
+```
+
+Run that from host cron or a systemd timer. This path does not need an LLM and
+does not spend model tokens.
+
 ## Rollout And Upgrade
 
 - Production rollout: `docs/ROLLOUT.md`
@@ -139,3 +165,4 @@ when one bot is present in multiple chats.
 - expects the embedding model `nomic-embed-text` to be available
 - installer patches `~/.openclaw/openclaw.json` and writes a timestamped backup before changes
 - first useful recall appears only after document ingest
+- Telegram scoped isolation for new turns depends on running the Telegram session ingest path
