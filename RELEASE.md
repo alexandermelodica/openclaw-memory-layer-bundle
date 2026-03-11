@@ -9,7 +9,7 @@
 Expected output:
 
 ```bash
-dist/openclaw-memory-layer-bundle-0.2.2.tar.gz
+dist/openclaw-memory-layer-bundle-0.2.3.tar.gz
 ```
 
 ## Verify Archive Contents
@@ -38,10 +38,10 @@ It must not contain:
 
 ## Publish
 
-1. Create a Git tag like `v0.2.2`.
+1. Create a Git tag like `v0.2.3`.
 2. Push the tag.
 3. Create a GitHub release from that tag.
-4. Attach `dist/openclaw-memory-layer-bundle-0.2.2.tar.gz`.
+4. Attach `dist/openclaw-memory-layer-bundle-0.2.3.tar.gz`.
 
 ## Known Limitations
 
@@ -65,8 +65,8 @@ It must not contain:
 For first-time installation only:
 
 ```bash
-tar -xzf openclaw-memory-layer-bundle-0.2.2.tar.gz
-cd openclaw-memory-layer-bundle-0.2.2
+tar -xzf openclaw-memory-layer-bundle-0.2.3.tar.gz
+cd openclaw-memory-layer-bundle-0.2.3
 ./install/install-openclaw-memory-layer.sh
 ```
 

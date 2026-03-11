@@ -12,9 +12,20 @@ All notable changes to `openclaw-memory-layer-bundle` are documented here.
 ### Changed
 - Telegram session ingest now writes both scoped chat-log rows and durable summary rows.
 - Group-chat policy now explicitly allows one short proactive follow-up when a document-like payload is recognized.
+- Telegram context inference now falls back to prompt metadata when OpenClaw does not pass Telegram runtime fields explicitly.
+- Recommended Telegram ingest cadence on live hosts is now every 5 minutes instead of hourly to reduce chat-context lag.
 
 ### Fixed
 - Telegram message ingest strips injected memory blocks and document-intake hints from logged user text to avoid recursive prompt pollution.
+
+## v0.2.3
+
+### Changed
+- `global-memory` now infers Telegram scope from embedded prompt metadata when runtime `source/chat_id/user_id` fields are missing.
+- Recommended host scheduling for Telegram ingest is tightened to `*/5 * * * *` to reduce recent-context lag between chat traffic and memory availability.
+
+### Fixed
+- Telegram replies no longer depend solely on explicit runtime channel metadata to load chat profiles and recent local chat context.
 
 ## v0.2.1
 

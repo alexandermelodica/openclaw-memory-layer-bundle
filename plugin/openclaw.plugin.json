@@ -2,7 +2,7 @@
   "id": "global-memory",
   "name": "Global Memory",
   "description": "Automatic narrow memory recall for every OpenClaw turn.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
