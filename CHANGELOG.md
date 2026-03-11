@@ -23,9 +23,11 @@ All notable changes to `openclaw-memory-layer-bundle` are documented here.
 ### Changed
 - `global-memory` now infers Telegram scope from embedded prompt metadata when runtime `source/chat_id/user_id` fields are missing.
 - Recommended host scheduling for Telegram ingest is tightened to `*/5 * * * *` to reduce recent-context lag between chat traffic and memory availability.
+- Telegram replies now more reliably keep chat-local memory isolated, so multiple Telegram chats with the same OpenClaw bot are not treated as one merged context.
 
 ### Fixed
 - Telegram replies no longer depend solely on explicit runtime channel metadata to load chat profiles and recent local chat context.
+- Scoped Telegram recall is now more reliable at preserving per-chat context boundaries during live replies.
 
 ## v0.2.1
 

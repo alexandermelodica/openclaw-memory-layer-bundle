@@ -57,6 +57,7 @@ It must not contain:
 - direct in-place live DB migration is not the recommended first step
 - prefer staged rollout using a copied DB and parallel engine path
 - after successful validation, use `install/upgrade-to-scoped-memory.sh` for the production upgrade sequence
+- for Telegram, the intended behavior is per-chat scoped memory rather than one merged bot-wide chat context
 - see `docs/ROLLOUT.md` and `docs/UPGRADE.md`
 - summarize user-facing changes in `CHANGELOG.md`
 

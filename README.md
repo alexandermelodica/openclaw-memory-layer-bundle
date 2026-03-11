@@ -163,7 +163,7 @@ does not spend model tokens.
 - `v0.2.0` adds scoped Telegram-aware memory architecture, rollout guidance, and the scripted upgrade path.
 - `v0.2.1` adds the scoped Telegram session writer, token-free host scheduling, and ranking improvements for Telegram-local recall.
 - `v0.2.2` improves Telegram reply-context cleanup and supports targeted forced reingest for parser/retention refreshes.
-- `v0.2.3` improves Telegram context inference for live replies and reduces recommended ingest lag for recent chat context.
+- `v0.2.3` improves Telegram context inference for live replies, makes per-chat Telegram context separation more reliable, and reduces recommended ingest lag for recent chat context.
 - Use the clean install script only for new hosts.
 - Use the upgrade script only when a previous memory-layer installation already exists.
 
