@@ -1,5 +1,6 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -24,6 +25,7 @@ type RuntimeMemoryContext = {
 type PluginConfig = {
   engineRoot: string;
   nodeBin: string;
+  chatProfilesDir: string;
   minPromptChars: number;
   maxResults: number;
   recentChatMaxItems: number;
@@ -38,6 +40,7 @@ type PluginConfig = {
 const DEFAULT_CONFIG: PluginConfig = {
   engineRoot: path.join(process.env.HOME || ".", ".openclaw", "memory-layer", "engine"),
   nodeBin: process.execPath,
+  chatProfilesDir: "chat-profiles",
   minPromptChars: 12,
   maxResults: 3,
   recentChatMaxItems: 4,
@@ -58,6 +61,10 @@ function normalizeConfig(raw: Record<string, unknown> | undefined): PluginConfig
   return {
     engineRoot: typeof cfg.engineRoot === "string" && cfg.engineRoot.trim() ? cfg.engineRoot.trim() : DEFAULT_CONFIG.engineRoot,
     nodeBin: typeof cfg.nodeBin === "string" && cfg.nodeBin.trim() ? cfg.nodeBin.trim() : DEFAULT_CONFIG.nodeBin,
+    chatProfilesDir:
+      typeof cfg.chatProfilesDir === "string" && cfg.chatProfilesDir.trim()
+        ? cfg.chatProfilesDir.trim()
+        : DEFAULT_CONFIG.chatProfilesDir,
     minPromptChars:
       typeof cfg.minPromptChars === "number" ? Math.max(1, Math.floor(cfg.minPromptChars)) : DEFAULT_CONFIG.minPromptChars,
     maxResults: typeof cfg.maxResults === "number" ? Math.max(1, Math.floor(cfg.maxResults)) : DEFAULT_CONFIG.maxResults,
@@ -408,6 +415,49 @@ async function fetchRecentChatContext(params: {
   }
 }
 
+function sanitizeProfileName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+async function loadChatProfile(params: {
+  workspaceDir?: string;
+  cfg: PluginConfig;
+  memoryContext: RuntimeMemoryContext;
+  logger: OpenClawPluginApi["logger"];
+}): Promise<string | null> {
+  if (params.memoryContext.source !== "telegram" || !params.workspaceDir) {
+    return null;
+  }
+
+  const profilesRoot = path.join(params.workspaceDir, params.cfg.chatProfilesDir);
+  const candidates: string[] = [];
+
+  if (params.memoryContext.chatId) {
+    candidates.push(path.join(profilesRoot, `telegram-${sanitizeProfileName(params.memoryContext.chatId)}.md`));
+  }
+  if (params.memoryContext.userId) {
+    candidates.push(path.join(profilesRoot, `telegram-user-${sanitizeProfileName(params.memoryContext.userId)}.md`));
+  }
+  candidates.push(path.join(profilesRoot, "telegram-default.md"));
+
+  for (const filePath of candidates) {
+    try {
+      const content = (await readFile(filePath, "utf8")).trim();
+      if (!content) {
+        continue;
+      }
+      return `Chat profile:\n${content}`;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err?.code !== "ENOENT") {
+        params.logger.warn(`global-memory: failed to read chat profile ${filePath}: ${err.message}`);
+      }
+    }
+  }
+
+  return null;
+}
+
 const plugin = {
   id: "global-memory",
   name: "Global Memory",
@@ -419,6 +469,7 @@ const plugin = {
       properties: {
         engineRoot: { type: "string", minLength: 1 },
         nodeBin: { type: "string", minLength: 1 },
+        chatProfilesDir: { type: "string", minLength: 1 },
         minPromptChars: { type: "number", minimum: 1, maximum: 2000 },
         maxResults: { type: "number", minimum: 1, maximum: 10 },
         recentChatMaxItems: { type: "number", minimum: 1, maximum: 12 },
@@ -445,6 +496,12 @@ const plugin = {
       }
 
       const runtimeMemoryContext = extractRuntimeMemoryContext(event, ctx);
+      const chatProfile = await loadChatProfile({
+        workspaceDir: ctx.workspaceDir,
+        cfg,
+        memoryContext: runtimeMemoryContext,
+        logger: api.logger
+      });
       const recentChatContext = await fetchRecentChatContext({
         workspaceDir: ctx.workspaceDir,
         cfg,
@@ -462,7 +519,7 @@ const plugin = {
       });
 
       const documentHint = runtimeMemoryContext.source === "telegram" ? buildDocumentPromptHint(query) : null;
-      const sections = [recentChatContext, memoryContext, documentHint].filter(Boolean);
+      const sections = [chatProfile, recentChatContext, memoryContext, documentHint].filter(Boolean);
 
       if (sections.length === 0) {
         return;
