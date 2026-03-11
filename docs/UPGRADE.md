@@ -11,9 +11,12 @@ If this is a first-time installation, do not use the upgrade path. Use:
 ./install/install-openclaw-memory-layer.sh
 ```
 
-## Supported Upgrade Path
+## Supported Upgrade Paths
 
-This document covers upgrades from `v0.1.0` to `v0.2.0`.
+This document covers:
+
+- `v0.1.0` to `v0.2.0`
+- `v0.2.0` to `v0.2.1`
 
 ## Previous Version
 
@@ -43,6 +46,12 @@ And adds scope-aware retrieval policy:
 - `chat`
 - `user`
 - `global`
+
+`v0.2.1` adds:
+
+- a Telegram session writer for scoped durable notes
+- a host-safe ingest wrapper for cron/systemd scheduling
+- ranking changes so Telegram-local memory is preferred over irrelevant global noise
 
 ## Safe Upgrade Path
 
@@ -136,9 +145,10 @@ Rollback should only require:
 
 ## Recommended Release Note
 
-When publishing this upgrade, call out:
+When publishing these upgrades, call out:
 
 - scoped Telegram memory support
 - additive schema migration
 - no immediate in-place live DB migration recommended
 - staged rollout is preferred over direct cutover
+- `v0.2.1` adds token-free host scheduling for Telegram scoped ingest

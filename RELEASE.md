@@ -9,13 +9,13 @@
 Expected output:
 
 ```bash
-dist/openclaw-memory-layer-bundle-0.2.0.tar.gz
+dist/openclaw-memory-layer-bundle-0.2.1.tar.gz
 ```
 
 ## Verify Archive Contents
 
 ```bash
-tar -tzf dist/openclaw-memory-layer-bundle-0.2.0.tar.gz
+tar -tzf dist/openclaw-memory-layer-bundle-0.2.1.tar.gz
 ```
 
 The archive should contain only bundle files:
@@ -38,10 +38,10 @@ It must not contain:
 
 ## Publish
 
-1. Create a Git tag like `v0.2.0`.
+1. Create a Git tag like `v0.2.1`.
 2. Push the tag.
 3. Create a GitHub release from that tag.
-4. Attach `dist/openclaw-memory-layer-bundle-0.2.0.tar.gz`.
+4. Attach `dist/openclaw-memory-layer-bundle-0.2.1.tar.gz`.
 
 ## Known Limitations
 
@@ -65,12 +65,12 @@ It must not contain:
 For first-time installation only:
 
 ```bash
-tar -xzf openclaw-memory-layer-bundle-0.2.0.tar.gz
-cd openclaw-memory-layer-bundle-0.2.0
+tar -xzf openclaw-memory-layer-bundle-0.2.1.tar.gz
+cd openclaw-memory-layer-bundle-0.2.1
 ./install/install-openclaw-memory-layer.sh
 ```
 
-If you are updating from a previous version, use:
+If you are updating from `v0.2.0` or earlier, use:
 
 ```bash
 ./install/upgrade-to-scoped-memory.sh

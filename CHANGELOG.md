@@ -2,6 +2,21 @@
 
 All notable changes to `openclaw-memory-layer-bundle` are documented here.
 
+## v0.2.1
+
+### Added
+- Scoped Telegram memory writer for OpenClaw session logs.
+- Host-safe wrapper script for token-free Telegram memory ingest scheduling.
+
+### Changed
+- Telegram-scoped retrieval ranking now prioritizes matching `chat` and `user` memory over irrelevant global noise.
+- Search output for Telegram memory now returns human-readable labels/snippets instead of raw `source_id`.
+- Documentation now describes token-free host cron/systemd scheduling for Telegram scoped ingest.
+
+### Fixed
+- `global-memory` search parsing now tolerates non-JSON stray output more safely.
+- Telegram session ingest is now idempotent across repeat runs.
+
 ## v0.2.0
 
 ### Added

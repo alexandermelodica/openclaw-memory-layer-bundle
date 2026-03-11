@@ -71,8 +71,7 @@ node "$HOME/.openclaw/memory-layer/engine/bin/ingest-docs.js" \
 For Telegram-scoped durable notes:
 
 ```bash
-node "$HOME/.openclaw/memory-layer/engine/bin/ingest-telegram-sessions.js" \
-  "$HOME/.openclaw/agents/main/sessions/sessions.json"
+"$HOME/.openclaw/memory-layer/engine/bin/ingest-telegram-sessions.sh"
 ```
 
 ## Smoke Test
@@ -92,7 +91,7 @@ Build a release archive locally:
 Expected output:
 
 ```bash
-dist/openclaw-memory-layer-bundle-0.2.0.tar.gz
+dist/openclaw-memory-layer-bundle-0.2.1.tar.gz
 ```
 
 ## Notes
@@ -155,6 +154,7 @@ does not spend model tokens.
 
 - `v0.1.0` is the initial public bundle release.
 - `v0.2.0` adds scoped Telegram-aware memory architecture, rollout guidance, and the scripted upgrade path.
+- `v0.2.1` adds the scoped Telegram session writer, token-free host scheduling, and ranking improvements for Telegram-local recall.
 - Use the clean install script only for new hosts.
 - Use the upgrade script only when a previous memory-layer installation already exists.
 
