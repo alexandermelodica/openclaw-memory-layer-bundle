@@ -128,11 +128,18 @@ The bundle now ships a dedicated Telegram session writer that:
 
 - reads OpenClaw `sessions.json` and session JSONL files
 - extracts Telegram metadata from user turns
-- keeps only durable summaries, facts, decisions, and preferences
+- writes chat-log rows for incoming Telegram messages
+- keeps durable summaries, facts, decisions, and preferences alongside the raw chat log
 - writes scoped memory rows with `chat_id`, `thread_id`, `user_id`, and `session_id`
 
-It is intentionally narrow: it does not ingest every raw Telegram message into
-durable memory.
+The bundle also ships:
+
+- recent local chat context injection for Telegram replies
+- heuristic document-signal detection for tickets, bookings, route sheets, invoices, and docs
+- a prompt hint that tells the normal reply model to ask one short “what should I do with this?” question when a document-like payload is recognized
+
+This preserves normal model routing: the bundle does not switch the reply model
+just because a document or media payload was detected.
 
 Recommended regular sync on a live host:
 

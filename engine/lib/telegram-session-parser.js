@@ -3,6 +3,11 @@ const TELEGRAM_SENDER_RE = /Sender \(untrusted metadata\):\s*```json\s*([\s\S]*?
 const TELEGRAM_REPLIED_RE = /Replied message \(untrusted, for context\):\s*```json\s*([\s\S]*?)\s*```/gi;
 const TELEGRAM_QUOTED_RE = /Quoted message \(untrusted, for context\):\s*```json\s*([\s\S]*?)\s*```/gi;
 const TELEGRAM_FORWARDED_RE = /Forwarded message \(untrusted, for context\):\s*```json\s*([\s\S]*?)\s*```/gi;
+const TELEGRAM_ATTACHMENT_RE = /(Document|Attachment|Photo|Video|Audio|Voice|Media) \(untrusted metadata\):\s*```json\s*([\s\S]*?)\s*```/gi;
+const INJECTED_MEMORY_BLOCK_RE = /Relevant memory notes:\s*[\s\S]*?Use these only as supporting factual context\.[\s\S]*?(?:\n|$)/gi;
+const INJECTED_RECENT_CHAT_BLOCK_RE = /Recent chat context:\s*[\s\S]*?Use this as recent local chat context\.[\s\S]*?(?:\n|$)/gi;
+const INJECTED_DOCUMENT_HINT_RE = /Document-intake hint:[\s\S]*?Do not change model routing\.[\s\S]*?(?:\n|$)/gi;
+const INJECTED_MEDIA_SEND_HINT_RE = /To send an image back, prefer the message tool[\s\S]*?(?:\n|$)/gi;
 
 function safeJsonParse(value) {
   try {
@@ -29,6 +34,17 @@ function extractTelegramMetadata(rawText) {
   const senderMatch = rawText.match(TELEGRAM_SENDER_RE);
   const conversation = conversationMatch ? safeJsonParse(conversationMatch[1]) : null;
   const sender = senderMatch ? safeJsonParse(senderMatch[1]) : null;
+  const attachments = [];
+  let attachmentMatch;
+  while ((attachmentMatch = TELEGRAM_ATTACHMENT_RE.exec(rawText)) !== null) {
+    const parsed = safeJsonParse(attachmentMatch[2]);
+    if (parsed) {
+      attachments.push({
+        kind: attachmentMatch[1].toLowerCase(),
+        metadata: parsed,
+      });
+    }
+  }
 
   const cleanedText = rawText
     .replace(TELEGRAM_CONVERSATION_RE, "")
@@ -36,12 +52,18 @@ function extractTelegramMetadata(rawText) {
     .replace(TELEGRAM_REPLIED_RE, "")
     .replace(TELEGRAM_QUOTED_RE, "")
     .replace(TELEGRAM_FORWARDED_RE, "")
+    .replace(TELEGRAM_ATTACHMENT_RE, "")
+    .replace(INJECTED_MEMORY_BLOCK_RE, "")
+    .replace(INJECTED_RECENT_CHAT_BLOCK_RE, "")
+    .replace(INJECTED_DOCUMENT_HINT_RE, "")
+    .replace(INJECTED_MEDIA_SEND_HINT_RE, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
   return {
     conversation,
     sender,
+    attachments,
     cleanedText,
   };
 }
@@ -93,6 +115,117 @@ function normalizeForStorage(text) {
 
 function stripLeadingMention(text) {
   return text.replace(/^@\S+\s+/u, "").trim();
+}
+
+function inferAttachmentName(attachments) {
+  for (const attachment of attachments || []) {
+    const metadata = attachment?.metadata || {};
+    const name =
+      metadata.file_name ||
+      metadata.filename ||
+      metadata.name ||
+      metadata.title ||
+      metadata.original_name;
+    if (name) {
+      return String(name);
+    }
+  }
+  return null;
+}
+
+function inferAttachmentMime(attachments) {
+  for (const attachment of attachments || []) {
+    const metadata = attachment?.metadata || {};
+    const mime = metadata.mime_type || metadata.mime || metadata.content_type;
+    if (mime) {
+      return String(mime).toLowerCase();
+    }
+  }
+  return null;
+}
+
+function detectDocumentSignal(text, attachments = []) {
+  const normalized = normalizeForStorage(text).toLowerCase();
+  const attachmentName = (inferAttachmentName(attachments) || "").toLowerCase();
+  const mime = inferAttachmentMime(attachments) || "";
+  const combined = `${normalized}\n${attachmentName}\n${mime}`;
+
+  const specs = [
+    {
+      type: "ticket",
+      label: "билет",
+      tags: ["document", "ticket", "travel"],
+      re: /\b(билет|ticket|boarding pass|посадочн|рейс|flight|pnr)\b/i,
+      question: "Похоже, это билет или данные перелёта. Сохранить детали, проверить маршрут или собрать краткую сводку?"
+    },
+    {
+      type: "booking",
+      label: "бронь",
+      tags: ["document", "booking", "travel"],
+      re: /\b(бронь|booking|reservation|hotel|отель|airbnb|check-in|check out)\b/i,
+      question: "Похоже, это бронь. Сохранить ключевые даты и сделать краткую выжимку по бронированию?"
+    },
+    {
+      type: "route-sheet",
+      label: "маршрутный лист",
+      tags: ["document", "route-sheet", "travel"],
+      re: /\b(маршрутн|itinerary|маршрут|route sheet|travel plan)\b/i,
+      question: "Похоже, это маршрутный лист. Вытащить даты, сегменты маршрута и важные контрольные точки?"
+    },
+    {
+      type: "invoice",
+      label: "счёт или чек",
+      tags: ["document", "invoice", "finance"],
+      re: /\b(invoice|receipt|сч[её]т|чек|оплат|total|amount due)\b/i,
+      question: "Похоже, это счёт или чек. Извлечь сумму, дату и контрагента?"
+    },
+    {
+      type: "manual",
+      label: "документация",
+      tags: ["document", "documentation", "manual"],
+      re: /\b(manual|documentation|docs|инструкц|документац|spec|runbook)\b/i,
+      question: "Похоже, это документация. Заиндексировать в память, сделать краткую выжимку или выделить actionable шаги?"
+    }
+  ];
+
+  for (const spec of specs) {
+    if (spec.re.test(combined)) {
+      return {
+        detected: true,
+        confidence: "high",
+        type: spec.type,
+        label: spec.label,
+        tags: spec.tags,
+        question: spec.question,
+        attachmentName: attachmentName || null,
+        mime: mime || null,
+      };
+    }
+  }
+
+  if (attachments.length > 0 || /\b(pdf|docx?|xlsx?|pptx?|jpg|jpeg|png)\b/i.test(combined)) {
+    return {
+      detected: true,
+      confidence: "medium",
+      type: "document",
+      label: "документ",
+      tags: ["document"],
+      question: "Похоже, в чат пришёл документ. Нужна краткая выжимка, сохранение в память или разбор по действиям?",
+      attachmentName: attachmentName || null,
+      mime: mime || null,
+    };
+  }
+
+  return {
+    detected: false,
+    confidence: "none",
+    type: null,
+    label: null,
+    tags: [],
+    question: null,
+    attachmentName: attachmentName || null,
+    mime: mime || null,
+  };
 }
 
 function classifyTurnKind(userText, assistantText) {
@@ -159,6 +292,30 @@ function buildMemoryNote({ sessionEntry, conversation, sender, userText, assista
   };
 }
 
+function buildChatLogNote({ sessionEntry, conversation, sender, userText, docSignal }) {
+  const cleanUser = stripLeadingMention(normalizeForStorage(userText));
+  const senderLabel = sender?.name || conversation?.sender || sender?.label || "User";
+  const subject = conversation?.group_subject || sessionEntry?.subject || sessionEntry?.label || "Telegram";
+  const header = docSignal?.detected
+    ? `Telegram chat message (${docSignal.label})`
+    : "Telegram chat message";
+  const body = [
+    header,
+    `Subject: ${subject}`,
+    `Sender: ${normalizeForStorage(String(senderLabel))}`,
+    `Message: ${cleanUser}`,
+  ];
+
+  if (docSignal?.detected && docSignal.question) {
+    body.push(`Suggested follow-up: ${docSignal.question}`);
+  }
+
+  return {
+    kind: docSignal?.detected ? "document_signal" : "chat_message",
+    note: body.join("\n"),
+  };
+}
+
 module.exports = {
   extractMessageText,
   extractTelegramMetadata,
@@ -168,4 +325,6 @@ module.exports = {
   deriveThreadId,
   isWorthKeeping,
   buildMemoryNote,
+  buildChatLogNote,
+  detectDocumentSignal,
 };

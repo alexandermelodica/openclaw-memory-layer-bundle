@@ -26,6 +26,8 @@ type PluginConfig = {
   nodeBin: string;
   minPromptChars: number;
   maxResults: number;
+  recentChatMaxItems: number;
+  recentChatMaxChars: number;
   minScore: number;
   maxChars: number;
   maxSnippetChars: number;
@@ -38,6 +40,8 @@ const DEFAULT_CONFIG: PluginConfig = {
   nodeBin: process.execPath,
   minPromptChars: 12,
   maxResults: 3,
+  recentChatMaxItems: 4,
+  recentChatMaxChars: 900,
   minScore: 0.3,
   maxChars: 1400,
   maxSnippetChars: 360,
@@ -57,6 +61,14 @@ function normalizeConfig(raw: Record<string, unknown> | undefined): PluginConfig
     minPromptChars:
       typeof cfg.minPromptChars === "number" ? Math.max(1, Math.floor(cfg.minPromptChars)) : DEFAULT_CONFIG.minPromptChars,
     maxResults: typeof cfg.maxResults === "number" ? Math.max(1, Math.floor(cfg.maxResults)) : DEFAULT_CONFIG.maxResults,
+    recentChatMaxItems:
+      typeof cfg.recentChatMaxItems === "number"
+        ? Math.max(1, Math.floor(cfg.recentChatMaxItems))
+        : DEFAULT_CONFIG.recentChatMaxItems,
+    recentChatMaxChars:
+      typeof cfg.recentChatMaxChars === "number"
+        ? Math.max(200, Math.floor(cfg.recentChatMaxChars))
+        : DEFAULT_CONFIG.recentChatMaxChars,
     minScore: typeof cfg.minScore === "number" ? cfg.minScore : DEFAULT_CONFIG.minScore,
     maxChars: typeof cfg.maxChars === "number" ? Math.max(200, Math.floor(cfg.maxChars)) : DEFAULT_CONFIG.maxChars,
     maxSnippetChars:
@@ -195,6 +207,73 @@ function parseSearchJson(stdout: string): { results?: SearchHit[] } | null {
   }
 }
 
+type RecentChatHit = {
+  path?: string;
+  ts?: string;
+  kind?: string;
+  snippet?: string;
+};
+
+function formatRecentChatContext(hits: RecentChatHit[]): string | null {
+  if (!hits.length) {
+    return null;
+  }
+
+  return [
+    "Recent chat context:",
+    ...hits.map((hit) => {
+      const ts = hit.ts ? `[${hit.ts}] ` : "";
+      const pathLabel = hit.path ? `${hit.path} ` : "";
+      const kind = hit.kind ? `(${hit.kind}) ` : "";
+      return `- ${ts}${pathLabel}${kind}${sanitizeSnippet(hit.snippet || "", 220)}`;
+    }),
+    "Use this as recent local chat context. Prefer the current chat scope over unrelated global context.",
+  ].join("\n");
+}
+
+function buildDocumentPromptHint(query: string): string | null {
+  const normalized = query.toLowerCase();
+  const specs = [
+    {
+      re: /\b(билет|ticket|boarding pass|посадочн|flight|рейс|pnr)\b/i,
+      label: "билет или перелётные данные",
+      question: "Похоже, в чат прилетел билет или перелётные данные. Сразу коротко спроси, сохранить ли детали, проверить маршрут или сделать выжимку."
+    },
+    {
+      re: /\b(бронь|booking|reservation|hotel|отель|airbnb|check-in|check out)\b/i,
+      label: "бронь",
+      question: "Похоже, это бронь. Сразу коротко спроси, сохранить ли ключевые даты, контакты и условия бронирования."
+    },
+    {
+      re: /\b(маршрутн|itinerary|маршрут|route sheet|travel plan)\b/i,
+      label: "маршрутный лист",
+      question: "Похоже, это маршрутный лист. Сразу коротко спроси, вытащить ли сегменты маршрута, даты и контрольные точки."
+    },
+    {
+      re: /\b(invoice|receipt|сч[её]т|чек|оплат|amount due)\b/i,
+      label: "счёт или чек",
+      question: "Похоже, это счёт или чек. Сразу коротко спроси, извлечь ли сумму, дату и контрагента."
+    },
+    {
+      re: /\b(manual|documentation|docs|инструкц|документац|spec|runbook|pdf|docx?|xlsx?|pptx?)\b/i,
+      label: "документ",
+      question: "Похоже, в чат попал документ. Сразу коротко спроси, нужна ли выжимка, индексация в память или разбор следующих действий."
+    },
+  ];
+
+  for (const spec of specs) {
+    if (spec.re.test(normalized)) {
+      return [
+        `Document-intake hint: detected ${spec.label}.`,
+        spec.question,
+        "Do not change model routing. Keep the normal reply model; just adapt the response shape.",
+      ].join("\n");
+    }
+  }
+
+  return null;
+}
+
 async function searchMemory(params: {
   agentId: string;
   query: string;
@@ -269,6 +348,66 @@ async function searchMemory(params: {
   return formatted;
 }
 
+async function fetchRecentChatContext(params: {
+  workspaceDir?: string;
+  cfg: PluginConfig;
+  memoryContext: RuntimeMemoryContext;
+  logger: OpenClawPluginApi["logger"];
+}): Promise<string | null> {
+  if (params.memoryContext.source !== "telegram") {
+    return null;
+  }
+  if (!params.memoryContext.chatId && !params.memoryContext.threadId && !params.memoryContext.userId) {
+    return null;
+  }
+
+  let stdout = "";
+  let stderr = "";
+  try {
+    const result = await execFileAsync(
+      params.cfg.nodeBin,
+      [
+        path.join(params.cfg.engineRoot, "bin", "recent-chat-context.js"),
+        "--limit",
+        String(params.cfg.recentChatMaxItems),
+        "--max-chars",
+        String(params.cfg.recentChatMaxChars),
+        ...(params.memoryContext.source ? ["--source", params.memoryContext.source] : []),
+        ...(params.memoryContext.scope ? ["--scope", params.memoryContext.scope] : []),
+        ...(params.memoryContext.chatId ? ["--chat-id", params.memoryContext.chatId] : []),
+        ...(params.memoryContext.threadId ? ["--thread-id", params.memoryContext.threadId] : []),
+        ...(params.memoryContext.userId ? ["--user-id", params.memoryContext.userId] : []),
+        ...(params.memoryContext.sessionId ? ["--session-id", params.memoryContext.sessionId] : []),
+        "--json",
+      ],
+      {
+        cwd: params.workspaceDir,
+        timeout: params.cfg.timeoutMs,
+        maxBuffer: 2 * 1024 * 1024,
+      },
+    );
+    stdout = result.stdout;
+    stderr = result.stderr;
+  } catch (error) {
+    if (typeof error === "object" && error) {
+      const err = error as { stdout?: string; stderr?: string; message?: string };
+      stdout = err.stdout ?? "";
+      stderr = err.stderr ?? err.message ?? "";
+    } else {
+      stderr = String(error);
+    }
+  }
+
+  try {
+    const parsed = parseSearchJson(stdout) as { results?: RecentChatHit[] } | null;
+    return formatRecentChatContext(parsed?.results ?? []);
+  } catch (error) {
+    const detail = stderr.trim() || String(error);
+    params.logger.warn(`global-memory: recent chat context failed${detail ? `: ${detail}` : ""}`);
+    return null;
+  }
+}
+
 const plugin = {
   id: "global-memory",
   name: "Global Memory",
@@ -282,6 +421,8 @@ const plugin = {
         nodeBin: { type: "string", minLength: 1 },
         minPromptChars: { type: "number", minimum: 1, maximum: 2000 },
         maxResults: { type: "number", minimum: 1, maximum: 10 },
+        recentChatMaxItems: { type: "number", minimum: 1, maximum: 12 },
+        recentChatMaxChars: { type: "number", minimum: 200, maximum: 4000 },
         minScore: { type: "number", minimum: 0, maximum: 1 },
         maxChars: { type: "number", minimum: 200, maximum: 5000 },
         maxSnippetChars: { type: "number", minimum: 120, maximum: 2000 },
@@ -303,21 +444,33 @@ const plugin = {
         return;
       }
 
+      const runtimeMemoryContext = extractRuntimeMemoryContext(event, ctx);
+      const recentChatContext = await fetchRecentChatContext({
+        workspaceDir: ctx.workspaceDir,
+        cfg,
+        memoryContext: runtimeMemoryContext,
+        logger: api.logger
+      });
+
       const memoryContext = await searchMemory({
         agentId: ctx.agentId ?? "main",
         query,
         workspaceDir: ctx.workspaceDir,
         cfg,
-        memoryContext: extractRuntimeMemoryContext(event, ctx),
+        memoryContext: runtimeMemoryContext,
         logger: api.logger
       });
 
-      if (!memoryContext) {
+      const documentHint = runtimeMemoryContext.source === "telegram" ? buildDocumentPromptHint(query) : null;
+      const sections = [recentChatContext, memoryContext, documentHint].filter(Boolean);
+
+      if (sections.length === 0) {
         return;
       }
 
-      api.logger.info?.(`global-memory: injected recall (${memoryContext.length} chars)`);
-      return { prependContext: memoryContext };
+      const prependContext = sections.join("\n\n");
+      api.logger.info?.(`global-memory: injected recall (${prependContext.length} chars)`);
+      return { prependContext };
     });
   }
 };

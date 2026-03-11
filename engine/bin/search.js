@@ -63,10 +63,15 @@ function toResult(row) {
     meta.filePath ||
     telegramLabel ||
     decoded.path ||
-    (row.source_type === "telegram_summary" ? `telegram:${row.chat_id || row.user_id || "unknown"}` : row.source_id);
+    ((row.source_type === "telegram_summary" || row.source_type === "telegram_message")
+      ? `telegram:${row.chat_id || row.user_id || "unknown"}`
+      : row.source_id);
   const snippet =
     snippetFromFile(meta, decoded.path) ||
     meta.contentPreview ||
+    (row.source_type === "telegram_message" && telegramLabel
+      ? `Telegram message from ${telegramLabel}`
+      : "") ||
     (row.source_type === "telegram_summary" && telegramLabel
       ? `Telegram ${row.kind || "memory"} note from ${telegramLabel}`
       : "") ||

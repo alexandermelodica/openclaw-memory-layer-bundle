@@ -5,13 +5,12 @@
   "type": "commonjs",
   "description": "Portable Memory Engine for OpenClaw RAG recall",
   "scripts": {
-    "check": "node --check lib/config.js && node --check lib/memory-scope.js && node --check lib/telegram-session-parser.js && node --check lib/vector-search.js && node --check bin/init-db.js && node --check bin/search.js && node --check bin/log-note.js && node --check bin/health-check.js && node --check bin/ingest-docs.js && node --check bin/ingest-telegram-sessions.js",
+    "check": "node --check lib/config.js && node --check lib/memory-scope.js && node --check lib/telegram-session-parser.js && node --check lib/vector-search.js && node --check bin/init-db.js && node --check bin/search.js && node --check bin/recent-chat-context.js && node --check bin/log-note.js && node --check bin/health-check.js && node --check bin/ingest-docs.js && node --check bin/ingest-telegram-sessions.js",
     "init": "node bin/init-db.js"
   },
   "dependencies": {
     "glob": "^11.0.1",
     "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
-    "uuid": "^9.0.1"
+    "sqlite3": "^5.1.7"
   }
 }

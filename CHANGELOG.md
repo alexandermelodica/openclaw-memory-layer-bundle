@@ -2,6 +2,20 @@
 
 All notable changes to `openclaw-memory-layer-bundle` are documented here.
 
+## Unreleased
+
+### Added
+- Recent Telegram chat context loader for `global-memory`, so replies can use scoped local chat history alongside semantic recall.
+- Full Telegram incoming message logging into the memory DB via `telegram_message` rows.
+- Heuristic document-signal detection for Telegram payloads such as tickets, bookings, route sheets, invoices, and docs.
+
+### Changed
+- Telegram session ingest now writes both scoped chat-log rows and durable summary rows.
+- Group-chat policy now explicitly allows one short proactive follow-up when a document-like payload is recognized.
+
+### Fixed
+- Telegram message ingest strips injected memory blocks and document-intake hints from logged user text to avoid recursive prompt pollution.
+
 ## v0.2.1
 
 ### Added

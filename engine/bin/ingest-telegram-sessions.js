@@ -2,7 +2,6 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { v4: uuidv4 } = require("uuid");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
 const { getConfig } = require("../lib/config.js");
@@ -15,6 +14,8 @@ const {
   deriveThreadId,
   isWorthKeeping,
   buildMemoryNote,
+  buildChatLogNote,
+  detectDocumentSignal,
 } = require("../lib/telegram-session-parser.js");
 
 async function getDb() {
@@ -145,6 +146,10 @@ function extractSessionFile(sessionEntry, sessionsFile) {
 
 function buildSourceId(sessionId, userMessageId) {
   return `${sessionId}:${userMessageId}`;
+}
+
+function buildMessageSourceId(sessionId, messageId) {
+  return `${sessionId}:msg:${messageId}`;
 }
 
 async function ensureStateDir() {
@@ -282,9 +287,65 @@ async function upsertTelegramNote(db, row, dryRun) {
        status, error_text, kind, created_at, ttl_until, project, service, env, source, scope,
        chat_id, thread_id, user_id, session_id, tags, tags_norm)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    uuidv4(),
+    crypto.randomUUID(),
     row.ts,
     "telegram_summary",
+    row.sourceId,
+    row.contentHash,
+    row.vector,
+    row.vectorRaw,
+    row.vectorDim,
+    row.model,
+    row.metaJson,
+    row.status,
+    row.errorText,
+    row.kind,
+    row.createdAt,
+    null,
+    row.project,
+    null,
+    row.env,
+    row.source,
+    row.scope,
+    row.chatId,
+    row.threadId,
+    row.userId,
+    row.sessionId,
+    row.tags,
+    row.tagsNorm,
+  );
+
+  return existing ? "updated" : "inserted";
+}
+
+async function upsertTelegramMessage(db, row, dryRun) {
+  const existing = await db.get(
+    "SELECT id, content_hash FROM embeddings WHERE source_type = ? AND source_id = ?",
+    "telegram_message",
+    row.sourceId,
+  );
+
+  if (existing && existing.content_hash === row.contentHash) {
+    return "unchanged";
+  }
+
+  if (existing && !dryRun) {
+    await db.run("DELETE FROM embeddings WHERE id = ?", existing.id);
+  }
+
+  if (dryRun) {
+    return existing ? "would-update" : "would-insert";
+  }
+
+  await db.run(
+    `INSERT INTO embeddings
+      (id, ts, source_type, source_id, content_hash, vector, vector_raw, vector_dim, model, meta_json,
+       status, error_text, kind, created_at, ttl_until, project, service, env, source, scope,
+       chat_id, thread_id, user_id, session_id, tags, tags_norm)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    crypto.randomUUID(),
+    row.ts,
+    "telegram_message",
     row.sourceId,
     row.contentHash,
     row.vector,
@@ -336,6 +397,111 @@ function tagsForKind(kind) {
   };
 }
 
+function mergeTags(...parts) {
+  return [...new Set(parts.flat().filter(Boolean))];
+}
+
+async function ingestUserMessages(db, sessionEntry, events, sessionFile, options) {
+  const sessionId = String(sessionEntry.sessionId || "");
+  let inserted = 0;
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const event of events) {
+    if (event?.type !== "message" || event.message?.role !== "user") {
+      continue;
+    }
+
+    const rawUserText = extractMessageText(event.message);
+    if (!rawUserText.trim()) {
+      continue;
+    }
+
+    const { conversation, sender, attachments, cleanedText } = extractTelegramMetadata(rawUserText);
+    const normalizedText = normalizeNote(cleanedText);
+    if (!normalizedText) {
+      continue;
+    }
+
+    const scope = getTelegramSessionScope(sessionEntry, conversation);
+    const chatId = deriveChatId(sessionEntry, conversation);
+    const threadId = deriveThreadId(sessionEntry, conversation);
+    const userId = deriveUserId(sessionEntry, conversation, sender);
+    const docSignal = detectDocumentSignal(normalizedText, attachments);
+    const { kind, note } = buildChatLogNote({
+      sessionEntry,
+      conversation,
+      sender,
+      userText: normalizedText,
+      docSignal,
+    });
+    const normalizedNote = normalizeNote(note);
+    const contentHash = crypto.createHash("sha256").update(normalizedNote).digest("hex");
+    const embedding = options.dryRun
+      ? { json: null, raw: null, dim: null, status: "ok", error: null }
+      : await generateEmbedding(normalizedNote);
+    const ts = event.timestamp || new Date().toISOString();
+    const createdAt = String(ts).replace("T", " ").slice(0, 19);
+    const baseTags = ["telegram", "chat-log", scope];
+    if (kind === "document_signal") {
+      baseTags.push("document-signal");
+    }
+    const mergedTags = mergeTags(baseTags, docSignal.tags);
+    const metaJson = JSON.stringify({
+      conversation,
+      sender,
+      attachments,
+      docSignal,
+      sessionKey: sessionEntry.key || null,
+      sessionLabel: sessionEntry.label || null,
+      sessionFile,
+      userMessageId: event.id,
+      role: "user",
+      contentPreview: normalizedNote.slice(0, 400),
+      label: conversation?.group_subject || sessionEntry?.subject || sessionEntry?.label || "Telegram",
+    });
+
+    const result = await upsertTelegramMessage(
+      db,
+      {
+        ts,
+        sourceId: buildMessageSourceId(sessionId, event.id),
+        contentHash,
+        vector: embedding.json,
+        vectorRaw: embedding.raw,
+        vectorDim: embedding.dim,
+        model: getConfig().embedModel,
+        metaJson,
+        status: options.dryRun ? "ok" : embedding.status === "ok" ? "ok" : "failed",
+        errorText: embedding.error,
+        kind,
+        createdAt,
+        project: getConfig().project,
+        env: getConfig().env,
+        source: "telegram",
+        scope,
+        chatId,
+        threadId,
+        userId,
+        sessionId,
+        tags: mergedTags.join(","),
+        tagsNorm: mergedTags.join(","),
+      },
+      options.dryRun,
+    );
+
+    if (result === "inserted" || result === "would-insert") {
+      inserted += 1;
+    } else if (result === "updated" || result === "would-update") {
+      updated += 1;
+    } else if (result === "unchanged") {
+      unchanged += 1;
+    }
+  }
+
+  return { inserted, updated, unchanged };
+}
+
 async function ingestSession(db, sessionEntry, sessionsFile, options) {
   const sessionFile = extractSessionFile(sessionEntry, sessionsFile);
   if (!sessionFile) {
@@ -362,6 +528,10 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
   let deleted = 0;
 
   const turnPairs = pairConversationTurns(events);
+  const messageResult = await ingestUserMessages(db, sessionEntry, events, sessionFile, options);
+  inserted += messageResult.inserted;
+  updated += messageResult.updated;
+  unchanged += messageResult.unchanged;
   for (const pair of turnPairs) {
     const current = pair.userEvent;
     const currentMessage = current?.message;
