@@ -17,6 +17,7 @@ This document covers:
 
 - `v0.1.0` to `v0.2.0`
 - `v0.2.0` to `v0.2.1`
+- `v0.2.1` to `v0.2.2`
 
 ## Previous Version
 
@@ -52,6 +53,12 @@ And adds scope-aware retrieval policy:
 - a Telegram session writer for scoped durable notes
 - a host-safe ingest wrapper for cron/systemd scheduling
 - ranking changes so Telegram-local memory is preferred over irrelevant global noise
+
+`v0.2.2` adds:
+
+- stronger Telegram reply-context cleanup
+- forced reingest support through the wrapper script
+- stale row deletion during forced Telegram refresh
 
 ## Safe Upgrade Path
 
@@ -152,3 +159,4 @@ When publishing these upgrades, call out:
 - no immediate in-place live DB migration recommended
 - staged rollout is preferred over direct cutover
 - `v0.2.1` adds token-free host scheduling for Telegram scoped ingest
+- `v0.2.2` is a quality/polish release for Telegram parser cleanup and forced refresh

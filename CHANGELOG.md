@@ -17,6 +17,16 @@ All notable changes to `openclaw-memory-layer-bundle` are documented here.
 - `global-memory` search parsing now tolerates non-JSON stray output more safely.
 - Telegram session ingest is now idempotent across repeat runs.
 
+## v0.2.2
+
+### Changed
+- Telegram reply-context cleanup is now applied during forced reingest, including removal of stale low-value rows that no longer pass retention heuristics.
+- Telegram session ingest now supports `--force` through the wrapper script for targeted refreshes after parser improvements.
+
+### Fixed
+- Reply-context and quoted-message blocks are stripped more aggressively from Telegram durable notes.
+- Forced Telegram reingest can now delete stale rows that would otherwise survive incremental updates.
+
 ## v0.2.0
 
 ### Added
