@@ -1,5 +1,8 @@
 const TELEGRAM_CONVERSATION_RE = /Conversation info \(untrusted metadata\):\s*```json\s*([\s\S]*?)\s*```/i;
 const TELEGRAM_SENDER_RE = /Sender \(untrusted metadata\):\s*```json\s*([\s\S]*?)\s*```/i;
+const TELEGRAM_REPLIED_RE = /Replied message \(untrusted, for context\):\s*```json\s*([\s\S]*?)\s*```/gi;
+const TELEGRAM_QUOTED_RE = /Quoted message \(untrusted, for context\):\s*```json\s*([\s\S]*?)\s*```/gi;
+const TELEGRAM_FORWARDED_RE = /Forwarded message \(untrusted, for context\):\s*```json\s*([\s\S]*?)\s*```/gi;
 
 function safeJsonParse(value) {
   try {
@@ -30,6 +33,9 @@ function extractTelegramMetadata(rawText) {
   const cleanedText = rawText
     .replace(TELEGRAM_CONVERSATION_RE, "")
     .replace(TELEGRAM_SENDER_RE, "")
+    .replace(TELEGRAM_REPLIED_RE, "")
+    .replace(TELEGRAM_QUOTED_RE, "")
+    .replace(TELEGRAM_FORWARDED_RE, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
@@ -85,6 +91,10 @@ function normalizeForStorage(text) {
   return text.replace(/\s+/g, " ").trim();
 }
 
+function stripLeadingMention(text) {
+  return text.replace(/^@\S+\s+/u, "").trim();
+}
+
 function classifyTurnKind(userText, assistantText) {
   const joined = `${userText}\n${assistantText}`.toLowerCase();
   if (/(предпочитаю|по умолчанию|говори со мной|обращайся|хочу,? чтобы|нравится)/i.test(joined)) {
@@ -129,7 +139,7 @@ function isWorthKeeping(userText, assistantText) {
 }
 
 function buildMemoryNote({ sessionEntry, conversation, sender, userText, assistantText }) {
-  const cleanUser = normalizeForStorage(userText);
+  const cleanUser = stripLeadingMention(normalizeForStorage(userText));
   const cleanAssistant = normalizeForStorage(assistantText);
   const senderLabel = sender?.name || conversation?.sender || sender?.label || "User";
   const subject = conversation?.group_subject || sessionEntry?.subject || sessionEntry?.label || "Telegram";

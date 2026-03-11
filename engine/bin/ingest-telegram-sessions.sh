@@ -15,4 +15,5 @@ fi
 exec env MEMORY_LAYER_HOME="$MEMORY_LAYER_HOME" \
   "$NODE_BIN" \
   "$MEMORY_LAYER_HOME/engine/bin/ingest-telegram-sessions.js" \
-  "$SESSIONS_FILE"
+  "$SESSIONS_FILE" \
+  "$@"

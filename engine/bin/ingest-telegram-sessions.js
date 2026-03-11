@@ -74,6 +74,7 @@ function parseArgs(argv) {
     sessionsFile: "",
     limit: 0,
     dryRun: false,
+    force: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -84,6 +85,8 @@ function parseArgs(argv) {
       args.limit = Math.max(0, Number.parseInt(argv[++i], 10) || 0);
     } else if (arg === "--dry-run") {
       args.dryRun = true;
+    } else if (arg === "--force") {
+      args.force = true;
     }
   }
 
@@ -310,6 +313,21 @@ async function upsertTelegramNote(db, row, dryRun) {
   return existing ? "updated" : "inserted";
 }
 
+async function deleteTelegramNoteBySourceId(db, sourceId, dryRun) {
+  const existing = await db.get(
+    "SELECT id FROM embeddings WHERE source_type = ? AND source_id = ?",
+    "telegram_summary",
+    sourceId,
+  );
+  if (!existing) {
+    return false;
+  }
+  if (!dryRun) {
+    await db.run("DELETE FROM embeddings WHERE id = ?", existing.id);
+  }
+  return true;
+}
+
 function tagsForKind(kind) {
   const tags = ["telegram", "scoped-memory", kind];
   return {
@@ -341,6 +359,7 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
   let updated = 0;
   let unchanged = 0;
   let skipped = 0;
+  let deleted = 0;
 
   const turnPairs = pairConversationTurns(events);
   for (const pair of turnPairs) {
@@ -349,8 +368,16 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
     const rawUserText = extractMessageText(currentMessage);
     const assistantText = pair.assistantText;
     const { conversation, sender, cleanedText } = extractTelegramMetadata(rawUserText);
+    const sessionId = String(sessionEntry.sessionId || "");
+    const sourceId = buildSourceId(sessionId, current.id);
 
     if (!isWorthKeeping(cleanedText, assistantText)) {
+      if (options.force) {
+        const removed = await deleteTelegramNoteBySourceId(db, sourceId, options.dryRun);
+        if (removed) {
+          deleted += 1;
+        }
+      }
       skipped += 1;
       continue;
     }
@@ -359,8 +386,6 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
     const chatId = deriveChatId(sessionEntry, conversation);
     const threadId = deriveThreadId(sessionEntry, conversation);
     const userId = deriveUserId(sessionEntry, conversation, sender);
-    const sessionId = String(sessionEntry.sessionId || "");
-    const sourceId = buildSourceId(sessionId, current.id);
     const { kind, note } = buildMemoryNote({
       sessionEntry,
       conversation,
@@ -430,7 +455,7 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
     updateSessionState(options.state, sessionFile, stat);
   }
 
-  return { inserted, updated, unchanged, skipped };
+  return { inserted, updated, unchanged, skipped, deleted };
 }
 
 async function main() {
@@ -450,15 +475,16 @@ async function main() {
 
   const selectedEntries = args.limit > 0 ? sessionEntries.slice(0, args.limit) : sessionEntries;
   const db = await getDb();
-  let totals = { inserted: 0, updated: 0, unchanged: 0, skipped: 0, missingSessionFiles: 0, skippedByState: 0 };
+  let totals = { inserted: 0, updated: 0, unchanged: 0, skipped: 0, deleted: 0, missingSessionFiles: 0, skippedByState: 0 };
 
   try {
     for (const sessionEntry of selectedEntries) {
-      const result = await ingestSession(db, sessionEntry, sessionsFile, { dryRun: args.dryRun, state });
+      const result = await ingestSession(db, sessionEntry, sessionsFile, { dryRun: args.dryRun, state, force: args.force });
       totals.inserted += result.inserted;
       totals.updated += result.updated;
       totals.unchanged += result.unchanged;
       totals.skipped += result.skipped;
+      totals.deleted += result.deleted || 0;
       totals.missingSessionFiles += result.missingSessionFile ? 1 : 0;
       totals.skippedByState += result.sessionSkippedByState ? 1 : 0;
     }
@@ -476,6 +502,7 @@ async function main() {
       {
         sessions: selectedEntries.length,
         dryRun: args.dryRun,
+        force: args.force,
         ...totals,
       },
       null,
