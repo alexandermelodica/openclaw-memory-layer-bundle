@@ -99,18 +99,48 @@ function normalizeOptional(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
+function extractPromptMetadata(prompt: string): Partial<RuntimeMemoryContext> {
+  const text = String(prompt || "");
+  const sourceHints = /(Conversation info \(untrusted metadata\)|Sender \(untrusted metadata\)|sender_id|message_id)/i.test(text);
+
+  const chatId =
+    text.match(/"chat_id"\s*:\s*"([^"]+)"/)?.[1] ||
+    text.match(/"chatId"\s*:\s*"([^"]+)"/)?.[1];
+  const threadId =
+    text.match(/"thread_id"\s*:\s*"([^"]+)"/)?.[1] ||
+    text.match(/"threadId"\s*:\s*"([^"]+)"/)?.[1] ||
+    text.match(/"topic_id"\s*:\s*"([^"]+)"/)?.[1] ||
+    text.match(/"topicId"\s*:\s*"([^"]+)"/)?.[1];
+  const userId =
+    text.match(/"sender_id"\s*:\s*"([^"]+)"/)?.[1] ||
+    text.match(/"user_id"\s*:\s*"([^"]+)"/)?.[1] ||
+    text.match(/"from_id"\s*:\s*"([^"]+)"/)?.[1] ||
+    text.match(/"id"\s*:\s*"([^"]+)"/)?.[1];
+  const sessionId =
+    text.match(/"session_id"\s*:\s*"([^"]+)"/)?.[1] ||
+    text.match(/"sessionId"\s*:\s*"([^"]+)"/)?.[1];
+
+  const source = sourceHints || chatId || threadId || userId ? "telegram" : undefined;
+  return { source, chatId, threadId, userId, sessionId };
+}
+
 function extractRuntimeMemoryContext(event: any, ctx: any): RuntimeMemoryContext {
+  const promptMeta = extractPromptMetadata(typeof event?.prompt === "string" ? event.prompt : "");
   const combined = {
     ...(ctx ?? {}),
     ...(ctx?.message ?? {}),
     ...(ctx?.telegram ?? {}),
+    ...(ctx?.deliveryContext ?? {}),
+    ...(ctx?.session ?? {}),
     ...(event?.metadata ?? {}),
+    promptMeta,
   };
 
   const source =
     normalizeOptional(combined.source) ||
     normalizeOptional(combined.channel) ||
-    normalizeOptional(combined.platform);
+    normalizeOptional(combined.platform) ||
+    normalizeOptional(combined.lastChannel);
   const chatId =
     normalizeOptional(combined.chatId) ||
     normalizeOptional(combined.chat_id);
