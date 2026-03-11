@@ -82,8 +82,10 @@ function sourceFilterClause(context, whereConditions, queryParams) {
   }
 
   if (context.source === TELEGRAM_SOURCE) {
-    whereConditions.push("(e.source = ? OR e.source IS NULL)");
-    queryParams.push(TELEGRAM_SOURCE);
+    whereConditions.push(
+      "((e.source = ?) OR (e.scope = 'global' AND e.kind IN ('decision', 'runbook', 'config', 'postmortem') AND (e.source IS NULL OR e.source != ?)))",
+    );
+    queryParams.push(TELEGRAM_SOURCE, TELEGRAM_SOURCE);
     return;
   }
 

@@ -128,8 +128,7 @@ async function vectorSearch(query, limit = 10, options = {}) {
     try {
         await db.loadExtension(getConfig().vecExtPath);
     } catch (e) {
-        console.error('Failed to load vector extension:', e.message);
-        process.exit(1);
+        throw new Error(`Failed to load vector extension: ${e.message}`);
     }
 
     // Context from options or environment

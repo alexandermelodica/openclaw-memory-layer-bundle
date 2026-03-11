@@ -99,6 +99,16 @@ function normalizeNote(text) {
     .trim();
 }
 
+function getStatePaths() {
+  const config = getConfig();
+  const stateDir = path.join(config.dataRoot, "state");
+  return {
+    stateDir,
+    stateFile: path.join(stateDir, "telegram-ingest-state.json"),
+    lockFile: path.join(stateDir, "telegram-ingest.lock"),
+  };
+}
+
 async function readJson(filePath) {
   const raw = await fs.readFile(filePath, "utf8");
   return JSON.parse(raw);
@@ -132,6 +142,116 @@ function extractSessionFile(sessionEntry, sessionsFile) {
 
 function buildSourceId(sessionId, userMessageId) {
   return `${sessionId}:${userMessageId}`;
+}
+
+async function ensureStateDir() {
+  const { stateDir } = getStatePaths();
+  await fs.mkdir(stateDir, { recursive: true });
+}
+
+async function loadState() {
+  const { stateFile } = getStatePaths();
+  try {
+    return await readJson(stateFile);
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return { sessions: {} };
+    }
+    throw error;
+  }
+}
+
+async function saveState(state) {
+  const { stateFile } = getStatePaths();
+  await ensureStateDir();
+  await fs.writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+}
+
+async function acquireLock() {
+  const { lockFile } = getStatePaths();
+  await ensureStateDir();
+
+  const tryOpen = async () => fs.open(lockFile, "wx");
+  try {
+    const handle = await tryOpen();
+    await handle.writeFile(`${process.pid}\n${new Date().toISOString()}\n`, "utf8");
+    await handle.close();
+    return async () => {
+      await fs.rm(lockFile, { force: true });
+    };
+  } catch (error) {
+    if (error?.code !== "EEXIST") {
+      throw error;
+    }
+
+    const stat = await fs.stat(lockFile).catch(() => null);
+    const staleMs = 60 * 60 * 1000;
+    if (stat && Date.now() - stat.mtimeMs > staleMs) {
+      await fs.rm(lockFile, { force: true });
+      const handle = await tryOpen();
+      await handle.writeFile(`${process.pid}\n${new Date().toISOString()}\n`, "utf8");
+      await handle.close();
+      return async () => {
+        await fs.rm(lockFile, { force: true });
+      };
+    }
+
+    throw new Error("telegram ingest already running");
+  }
+}
+
+function shouldSkipSession(sessionFile, stat, state) {
+  const entry = state.sessions?.[sessionFile];
+  if (!entry) {
+    return false;
+  }
+  return entry.mtimeMs === stat.mtimeMs && entry.size === stat.size;
+}
+
+function updateSessionState(state, sessionFile, stat) {
+  if (!state.sessions) {
+    state.sessions = {};
+  }
+  state.sessions[sessionFile] = {
+    mtimeMs: stat.mtimeMs,
+    size: stat.size,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function pairConversationTurns(events) {
+  const pairs = [];
+  let pendingUser = null;
+  let assistantParts = [];
+
+  for (const event of events) {
+    if (event?.type !== "message" || !event.message?.role) {
+      continue;
+    }
+
+    const role = event.message.role;
+    if (role === "user") {
+      if (pendingUser && assistantParts.length > 0) {
+        pairs.push({ userEvent: pendingUser, assistantText: assistantParts.join("\n\n").trim() });
+      }
+      pendingUser = event;
+      assistantParts = [];
+      continue;
+    }
+
+    if (role === "assistant" && pendingUser) {
+      const text = extractMessageText(event.message);
+      if (text) {
+        assistantParts.push(text);
+      }
+    }
+  }
+
+  if (pendingUser && assistantParts.length > 0) {
+    pairs.push({ userEvent: pendingUser, assistantText: assistantParts.join("\n\n").trim() });
+  }
+
+  return pairs;
 }
 
 async function upsertTelegramNote(db, row, dryRun) {
@@ -213,26 +333,21 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
     }
     throw error;
   }
+  const stat = await fs.stat(sessionFile);
+  if (!options.force && shouldSkipSession(sessionFile, stat, options.state)) {
+    return { inserted: 0, updated: 0, unchanged: 0, skipped: 0, sessionSkippedByState: true };
+  }
   let inserted = 0;
   let updated = 0;
   let unchanged = 0;
   let skipped = 0;
 
-  for (let i = 0; i < events.length - 1; i += 1) {
-    const current = events[i];
-    const next = events[i + 1];
+  const turnPairs = pairConversationTurns(events);
+  for (const pair of turnPairs) {
+    const current = pair.userEvent;
     const currentMessage = current?.message;
-    const nextMessage = next?.message;
-
-    if (current?.type !== "message" || next?.type !== "message") {
-      continue;
-    }
-    if (currentMessage?.role !== "user" || nextMessage?.role !== "assistant") {
-      continue;
-    }
-
     const rawUserText = extractMessageText(currentMessage);
-    const assistantText = extractMessageText(nextMessage);
+    const assistantText = pair.assistantText;
     const { conversation, sender, cleanedText } = extractTelegramMetadata(rawUserText);
 
     if (!isWorthKeeping(cleanedText, assistantText)) {
@@ -258,7 +373,7 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
     const embedding = options.dryRun
       ? { json: null, raw: null, dim: null, status: "ok", error: null }
       : await generateEmbedding(normalized);
-    const ts = next.timestamp || current.timestamp || new Date().toISOString();
+    const ts = current.timestamp || new Date().toISOString();
     const createdAt = String(ts).replace("T", " ").slice(0, 19);
     const { tags, tagsNorm } = tagsForKind(kind);
     const metaJson = JSON.stringify({
@@ -268,7 +383,7 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
       sessionLabel: sessionEntry.label || null,
       sessionFile,
       userMessageId: current.id,
-      assistantMessageId: next.id,
+      assistantMessageId: null,
       contentPreview: normalized.slice(0, 400),
       label: conversation?.group_subject || sessionEntry?.subject || sessionEntry?.label || "Telegram",
     });
@@ -311,6 +426,10 @@ async function ingestSession(db, sessionEntry, sessionsFile, options) {
     }
   }
 
+  if (!options.dryRun) {
+    updateSessionState(options.state, sessionFile, stat);
+  }
+
   return { inserted, updated, unchanged, skipped };
 }
 
@@ -323,24 +442,35 @@ async function main() {
 
   const sessionsFile = path.resolve(args.sessionsFile);
   const sessionsIndex = await readJson(sessionsFile);
+  const releaseLock = await acquireLock();
+  const state = await loadState();
   const sessionEntries = getSessionEntries(sessionsIndex).filter(
     (entry) => entry && (entry.origin?.provider === "telegram" || String(entry.key || "").includes(":telegram:")),
   );
 
   const selectedEntries = args.limit > 0 ? sessionEntries.slice(0, args.limit) : sessionEntries;
   const db = await getDb();
-  let totals = { inserted: 0, updated: 0, unchanged: 0, skipped: 0, missingSessionFiles: 0 };
+  let totals = { inserted: 0, updated: 0, unchanged: 0, skipped: 0, missingSessionFiles: 0, skippedByState: 0 };
 
-  for (const sessionEntry of selectedEntries) {
-    const result = await ingestSession(db, sessionEntry, sessionsFile, { dryRun: args.dryRun });
-    totals.inserted += result.inserted;
-    totals.updated += result.updated;
-    totals.unchanged += result.unchanged;
-    totals.skipped += result.skipped;
-    totals.missingSessionFiles += result.missingSessionFile ? 1 : 0;
+  try {
+    for (const sessionEntry of selectedEntries) {
+      const result = await ingestSession(db, sessionEntry, sessionsFile, { dryRun: args.dryRun, state });
+      totals.inserted += result.inserted;
+      totals.updated += result.updated;
+      totals.unchanged += result.unchanged;
+      totals.skipped += result.skipped;
+      totals.missingSessionFiles += result.missingSessionFile ? 1 : 0;
+      totals.skippedByState += result.sessionSkippedByState ? 1 : 0;
+    }
+
+    if (!args.dryRun) {
+      await saveState(state);
+    }
+  } finally {
+    await db.close();
+    await releaseLock();
   }
 
-  await db.close();
   console.log(
     JSON.stringify(
       {
